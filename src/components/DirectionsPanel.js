@@ -78,8 +78,11 @@ export default function DirectionsPanel({
         if (result) {
             setRoute(result);
             onRouteFound?.(result, originCoords, destCoords);
+        } else {
+            setRoute(null);
+            onClearRoute?.();
         }
-    }, [originCoords, destCoords, mode, onRouteFound]);
+    }, [originCoords, destCoords, mode, onRouteFound, onClearRoute, t]);
 
     useEffect(() => {
         calculateRoute();
@@ -187,7 +190,7 @@ export default function DirectionsPanel({
                     />
                 </div>
 
-                {autoResults.length > 0 && (
+                {(autoResults.length > 0 || (activeInput === 'origin' && !originCoords)) && (
                     <div className="directions-autocomplete" id="directions-autocomplete">
                         {activeInput === 'origin' && !originCoords && (
                             <div className="search-result-item" onClick={handleUseMyLocation} id="use-my-location">
