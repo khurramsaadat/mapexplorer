@@ -175,8 +175,13 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer }, ref) {
         },
 
         locateUser() {
-            if (!mapRef.current) return;
-            mapRef.current.locate({ setView: true, maxZoom: 16 });
+            mapRef.current.locate({ 
+                setView: true, 
+                maxZoom: 16, 
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            });
 
             mapRef.current.once('locationfound', (e) => {
                 const { lat, lng } = e.latlng;
@@ -208,8 +213,8 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer }, ref) {
                     .bindPopup('You are here');
             });
 
-            mapRef.current.once('locationerror', () => {
-                console.warn('Location access denied');
+            mapRef.current.once('locationerror', (e) => {
+                console.warn('Location access denied or timed out:', e.message);
             });
         },
 

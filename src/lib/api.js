@@ -24,6 +24,7 @@ export async function searchPlaces(query) {
       q: query,
       format: 'json',
       addressdetails: '1',
+      extratags: '1',  // Add extratags to get Wikipedia info
       limit: '6',
       'accept-language': 'en',
     });
@@ -36,7 +37,8 @@ export async function searchPlaces(query) {
     if (!res.ok) throw new Error('Search failed');
     const data = await res.json();
 
-    return data.map((item) => ({
+    // Enhance results with wikipedia data asynchronously without blocking the main search
+    const results = data.map((item) => ({
       id: item.place_id,
       name: item.display_name.split(',')[0],
       fullAddress: item.display_name,
@@ -45,11 +47,51 @@ export async function searchPlaces(query) {
       type: item.type,
       category: item.category,
       boundingbox: item.boundingbox,
+      extratags: item.extratags || {},
     }));
+    
+    // We can fetch wiki details here for the first few items, but to save time 
+    // we'll just parse the wiki tag and let the UI fetch if needed, 
+    // OR fetch the top result's details immediately for a snappy experience.
+    for (const place of results) {
+        if (place.extratags.wikipedia) {
+            place.wikiData = await getWikipediaDetails(place.extratags.wikipedia);
+        }
+    }
+    
+    return results;
   } catch (err) {
     if (err.name === 'AbortError') return [];
     console.error('Search error:', err);
     return [];
+  }
+}
+
+/**
+ * Fetch details from Wikipedia API given a wikipedia tag (e.g., "en:Dubai International Airport")
+ */
+export async function getWikipediaDetails(wikiTag) {
+  try {
+    const parts = wikiTag.split(':');
+    if (parts.length < 2) return null;
+    const lang = parts[0];
+    const title = parts.slice(1).join(':');
+
+    // Wikipedia REST API for page summary
+    const res = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, {
+        headers: { 'User-Agent': 'MapExplorer/1.0' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+        title: data.title,
+        description: data.extract,
+        thumbnail: data.thumbnail?.source || null,
+        url: data.content_urls?.desktop?.page || null,
+    };
+  } catch (err) {
+    console.error('Wiki fetch error:', err);
+    return null;
   }
 }
 
@@ -63,6 +105,7 @@ export async function reverseGeocode(lat, lon) {
       lon: lon.toString(),
       format: 'json',
       addressdetails: '1',
+      extratags: '1',
       'accept-language': 'en',
     });
 
@@ -81,12 +124,19 @@ export async function reverseGeocode(lat, lon) {
       addr.neighbourhood ||
       data.display_name.split(',')[0];
 
-    return {
+    const result = {
       name,
       fullAddress: data.display_name,
       lat: parseFloat(data.lat),
       lon: parseFloat(data.lon),
+      extratags: data.extratags || {},
     };
+
+    if (result.extratags.wikipedia) {
+        result.wikiData = await getWikipediaDetails(result.extratags.wikipedia);
+    }
+
+    return result;
   } catch (err) {
     console.error('Reverse geocode error:', err);
     return {
