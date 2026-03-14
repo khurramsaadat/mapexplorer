@@ -46,7 +46,7 @@ const greenIcon = L.icon({
 
 L.Marker.prototype.options.icon = defaultIcon;
 
-const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang }, ref) {
+const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, isDark }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const tileLayerRef = useRef(null);
@@ -246,7 +246,7 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang }, 
     }));
 
     return (
-        <div className="map-wrapper">
+        <div className={`map-wrapper layer-${currentLayer} ${isDark ? 'theme-dark' : 'theme-light'}`}>
             <div ref={mapContainerRef} style={{ width: '100%', height: '100%' }} />
         </div>
     );

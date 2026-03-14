@@ -1,0 +1,16 @@
+{
+  "name": "MapExplorer",
+  "short_name": "MapExplorer",
+  "description": "Explore the world with an interactive map. Search places, get directions, and navigate — all for free.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4285f4",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "192x192 512x512",
+      "type": "image/x-icon"
+    }
+  ]
+}

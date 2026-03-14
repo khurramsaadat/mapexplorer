@@ -152,6 +152,7 @@ export default function Home() {
         onMapClick={handleMapClick}
         currentLayer={currentLayer}
         lang={lang}
+        isDark={isDark}
       />
 
       {!directionsOpen && (

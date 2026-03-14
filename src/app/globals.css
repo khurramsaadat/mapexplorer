@@ -95,10 +95,11 @@ body {
   z-index: 0;
 }
 
-/* Dark mode map filter removed; we will use actual dark tiles instead */
-/* [data-theme="dark"] .leaflet-tile-pane {
-  filter: brightness(0.7) invert(1) contrast(1.1) hue-rotate(200deg) saturate(0.3);
-} */
+/* Dark mode map filter: We invert the standard OSM tiles to ensure excellent font (Arabic) rendering while keeping the dark aesthetic */
+.theme-dark.layer-streets .leaflet-tile-pane,
+.layer-dark .leaflet-tile-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%) !important;
+}
 
 .leaflet-control-zoom {
   display: none !important;

@@ -33,13 +33,13 @@ export default function MapControls({
         <>
             {/* Zoom */}
             <div className="zoom-controls">
-                <button className="zoom-btn" onClick={onZoomIn} title={t.zoomIn} id="zoom-in-btn">
+                <button className="zoom-btn" onClick={onZoomIn} title={t.zoomIn} aria-label={t.zoomIn} id="zoom-in-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
                 </button>
-                <button className="zoom-btn" onClick={onZoomOut} title={t.zoomOut} id="zoom-out-btn">
+                <button className="zoom-btn" onClick={onZoomOut} title={t.zoomOut} aria-label={t.zoomOut} id="zoom-out-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
@@ -53,6 +53,7 @@ export default function MapControls({
                     className="map-control-btn report-btn" 
                     onClick={() => { alert(t.reportHazard || 'Report feature coming soon!'); }} 
                     title={t.reportHazard || 'Report'} 
+                    aria-label={t.reportHazard || 'Report'}
                     id="report-btn"
                     style={{ background: 'var(--orange)', color: 'white', border: 'none', marginBottom: '8px' }}
                 >
@@ -63,7 +64,7 @@ export default function MapControls({
                     </svg>
                 </button>
 
-                <button className="map-control-btn" onClick={onLocate} title={t.myLocation} id="locate-btn">
+                <button className="map-control-btn" onClick={onLocate} title={t.myLocation} aria-label={t.myLocation} id="locate-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="3" />
                         <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
@@ -75,6 +76,7 @@ export default function MapControls({
                     id="layers-btn"
                     onClick={() => setShowLayers(!showLayers)}
                     title={t.mapLayers}
+                    aria-label={t.mapLayers}
                 >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polygon points="12 2 2 7 12 12 22 7 12 2" />
@@ -83,7 +85,7 @@ export default function MapControls({
                     </svg>
                 </button>
 
-                <button className="map-control-btn" onClick={onThemeToggle} title={t.darkMode} id="theme-btn">
+                <button className="map-control-btn" onClick={onThemeToggle} title={t.darkMode} aria-label={t.darkMode} id="theme-btn">
                     {isDark ? (
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <circle cx="12" cy="12" r="5" />
@@ -108,6 +110,7 @@ export default function MapControls({
                     className="map-control-btn"
                     onClick={onLangToggle}
                     title={t.languageLabel}
+                    aria-label={t.languageLabel}
                     id="lang-btn"
                     style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'Inter, sans-serif' }}
                 >
@@ -119,6 +122,7 @@ export default function MapControls({
                     className="map-control-btn" 
                     onClick={onFullscreenToggle} 
                     title={isFullscreen ? t.exitFullScreen : t.fullScreen} 
+                    aria-label={isFullscreen ? t.exitFullScreen : t.fullScreen}
                     id="fullscreen-btn"
                 >
                     {isFullscreen ? (
