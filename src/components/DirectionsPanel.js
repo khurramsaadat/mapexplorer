@@ -10,6 +10,7 @@ export default function DirectionsPanel({
     onClearRoute,
     initialDestination,
     t,
+    lang,
 }) {
     const [origin, setOrigin] = useState('');
     const [destination, setDestination] = useState('');
@@ -30,6 +31,23 @@ export default function DirectionsPanel({
         }
     }, [initialDestination, isOpen]);
 
+    // Auto-fill origin if user previously granted location consent
+    useEffect(() => {
+        if (isOpen && !origin) {
+            const consent = localStorage.getItem('location_consent');
+            if (consent === 'granted' && navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        setOrigin(t.yourLocation);
+                        setOriginCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                    },
+                    () => { }, // silently fail if expired/revoked
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            }
+        }
+    }, [isOpen, origin, t.yourLocation]);
+
     const handleInputChange = useCallback((field, value) => {
         if (field === 'origin') {
             setOrigin(value);
@@ -47,10 +65,10 @@ export default function DirectionsPanel({
                 setAutoResults([]);
                 return;
             }
-            const places = await searchPlaces(value);
+            const places = await searchPlaces(value, lang);
             setAutoResults(places);
         }, 350);
-    }, []);
+    }, [lang]);
 
     const handleAutoSelect = (place) => {
         if (activeInput === 'origin') {
@@ -112,6 +130,7 @@ export default function DirectionsPanel({
             (pos) => {
                 setOrigin(t.yourLocation);
                 setOriginCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                localStorage.setItem('location_consent', 'granted');
             },
             () => { }
         );

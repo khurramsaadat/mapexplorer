@@ -95,10 +95,10 @@ body {
   z-index: 0;
 }
 
-/* Dark mode map filter — keeps details visible */
-[data-theme="dark"] .leaflet-tile-pane {
+/* Dark mode map filter removed; we will use actual dark tiles instead */
+/* [data-theme="dark"] .leaflet-tile-pane {
   filter: brightness(0.7) invert(1) contrast(1.1) hue-rotate(200deg) saturate(0.3);
-}
+} */
 
 .leaflet-control-zoom {
   display: none !important;
@@ -556,7 +556,7 @@ body {
 .zoom-controls {
   position: fixed;
   right: 16px;
-  bottom: 260px;
+  bottom: 400px;
   display: flex;
   flex-direction: column;
   z-index: 1000;

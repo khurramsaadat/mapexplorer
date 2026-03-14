@@ -12,7 +12,7 @@ let searchAbortController = null;
 /**
  * Search for places using Nominatim
  */
-export async function searchPlaces(query) {
+export async function searchPlaces(query, lang = 'en') {
   if (!query || query.trim().length < 2) return [];
 
   // Cancel previous request
@@ -26,7 +26,7 @@ export async function searchPlaces(query) {
       addressdetails: '1',
       extratags: '1',  // Add extratags to get Wikipedia info
       limit: '6',
-      'accept-language': 'en',
+      'accept-language': lang,
     });
 
     const res = await fetch(`${NOMINATIM_BASE}/search?${params}`, {
@@ -54,8 +54,9 @@ export async function searchPlaces(query) {
     // we'll just parse the wiki tag and let the UI fetch if needed, 
     // OR fetch the top result's details immediately for a snappy experience.
     for (const place of results) {
-        if (place.extratags.wikipedia) {
-            place.wikiData = await getWikipediaDetails(place.extratags.wikipedia);
+        const wikiTag = place.extratags[`wikipedia:${lang}`] || place.extratags.wikipedia;
+        if (wikiTag) {
+            place.wikiData = await getWikipediaDetails(wikiTag);
         }
     }
     
@@ -98,7 +99,7 @@ export async function getWikipediaDetails(wikiTag) {
 /**
  * Reverse geocode coordinates to an address
  */
-export async function reverseGeocode(lat, lon) {
+export async function reverseGeocode(lat, lon, lang = 'en') {
   try {
     const params = new URLSearchParams({
       lat: lat.toString(),
@@ -106,7 +107,7 @@ export async function reverseGeocode(lat, lon) {
       format: 'json',
       addressdetails: '1',
       extratags: '1',
-      'accept-language': 'en',
+      'accept-language': lang,
     });
 
     const res = await fetch(`${NOMINATIM_BASE}/reverse?${params}`, {
@@ -132,8 +133,9 @@ export async function reverseGeocode(lat, lon) {
       extratags: data.extratags || {},
     };
 
-    if (result.extratags.wikipedia) {
-        result.wikiData = await getWikipediaDetails(result.extratags.wikipedia);
+    const wikiTag = result.extratags[`wikipedia:${lang}`] || result.extratags.wikipedia;
+    if (wikiTag) {
+        result.wikiData = await getWikipediaDetails(wikiTag);
     }
 
     return result;

@@ -45,6 +45,9 @@ const translations = {
         swap: 'Swap origin and destination',
         language: 'En',
         languageLabel: 'العربية',
+        fullScreen: 'Full screen',
+        exitFullScreen: 'Exit full screen',
+        reportHazard: 'Report Hazard',
     },
     ar: {
         searchPlaceholder: 'ابحث عن أماكن، عناوين...',
@@ -80,6 +83,9 @@ const translations = {
         swap: 'تبديل البداية والوجهة',
         language: 'Ar',
         languageLabel: 'English',
+        fullScreen: 'ملء الشاشة',
+        exitFullScreen: 'تصغير الشاشة',
+        reportHazard: 'الإبلاغ عن خطر',
     },
 };
 

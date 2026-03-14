@@ -40,6 +40,16 @@ export default function Home() {
   const [directionsDestination, setDirectionsDestination] = useState(null);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [toast, setToast] = useState({ message: '', visible: false });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Sync fullscreen state with DOM api if user presses Esc
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Initialize auto theme on mount (CSS filter on tiles handles dark map look)
   useEffect(() => {
@@ -105,17 +115,31 @@ export default function Home() {
     setCurrentLayer(layer);
   }, []);
 
-  // Theme (only toggles CSS variables + map filter, does NOT change tiles)
+  // Theme (changes tiles to dark layer and sets css variables)
   const handleThemeToggle = useCallback(() => {
     const newDark = !isDark;
     setIsDark(newDark);
     document.documentElement.setAttribute('data-theme', newDark ? 'dark' : 'light');
+    setCurrentLayer(newDark ? 'dark' : 'streets');
   }, [isDark]);
 
   // Language
   const handleLangToggle = useCallback(() => {
     setLang((prev) => (prev === 'en' ? 'ar' : 'en'));
   }, []);
+
+  // Fullscreen
+  const handleFullscreenToggle = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        showToast(`Error attempting to enable fullscreen: ${err.message}`);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  }, [showToast]);
 
   // Zoom
   const handleZoomIn = useCallback(() => mapRef.current?.zoomIn(), []);
@@ -127,6 +151,7 @@ export default function Home() {
         ref={mapRef}
         onMapClick={handleMapClick}
         currentLayer={currentLayer}
+        lang={lang}
       />
 
       {!directionsOpen && (
@@ -134,6 +159,7 @@ export default function Home() {
           onPlaceSelect={handlePlaceSelect}
           onDirectionsOpen={handleDirectionsOpen}
           t={t}
+          lang={lang}
         />
       )}
 
@@ -144,6 +170,7 @@ export default function Home() {
         onClearRoute={handleClearRoute}
         initialDestination={directionsDestination}
         t={t}
+        lang={lang}
       />
 
       <MapControls
@@ -156,6 +183,8 @@ export default function Home() {
         onZoomOut={handleZoomOut}
         lang={lang}
         onLangToggle={handleLangToggle}
+        isFullscreen={isFullscreen}
+        onFullscreenToggle={handleFullscreenToggle}
         t={t}
       />
 

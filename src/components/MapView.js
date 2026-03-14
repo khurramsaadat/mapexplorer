@@ -46,7 +46,7 @@ const greenIcon = L.icon({
 
 L.Marker.prototype.options.icon = defaultIcon;
 
-const MapView = forwardRef(function MapView({ onMapClick, currentLayer }, ref) {
+const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const tileLayerRef = useRef(null);
@@ -54,6 +54,11 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer }, ref) {
     const routeLayerRef = useRef(null);
     const locationMarkerRef = useRef(null);
     const locationCircleRef = useRef(null);
+    const langRef = useRef(lang);
+
+    useEffect(() => {
+        langRef.current = lang;
+    }, [lang]);
 
     // Initialize map
     useEffect(() => {
@@ -88,7 +93,7 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer }, ref) {
         // Click to explore
         map.on('click', async (e) => {
             const { lat, lng } = e.latlng;
-            const place = await reverseGeocode(lat, lng);
+            const place = await reverseGeocode(lat, lng, langRef.current);
             onMapClick?.(place);
         });
 
@@ -140,19 +145,28 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer }, ref) {
             if (!mapRef.current) return;
 
             // Clear previous
-            if (routeLayerRef.current) {
-                mapRef.current.removeLayer(routeLayerRef.current);
-            }
-            this.clearMarkers();
+            this.clearRoute();
 
-            // Draw polyline
+            // Draw polyline with Waze thick styling
             const coords = geometry.coordinates.map(([lon, lat]) => [lat, lon]);
-            routeLayerRef.current = L.polyline(coords, {
-                color: '#4285f4',
-                weight: 5,
-                opacity: 0.85,
-                smoothFactor: 1,
-            }).addTo(mapRef.current);
+            
+            const outline = L.polyline(coords, {
+                color: '#ffffff',
+                weight: 10,
+                opacity: 0.9,
+                lineCap: 'round',
+                lineJoin: 'round',
+            });
+
+            const path = L.polyline(coords, {
+                color: '#9b59b6', // Waze-ish purple
+                weight: 6,
+                opacity: 1,
+                lineCap: 'round',
+                lineJoin: 'round',
+            });
+
+            routeLayerRef.current = L.featureGroup([outline, path]).addTo(mapRef.current);
 
             // Add origin & destination markers
             if (originCoords) {

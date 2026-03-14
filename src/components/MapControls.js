@@ -12,6 +12,8 @@ export default function MapControls({
     onZoomOut,
     lang,
     onLangToggle,
+    isFullscreen,
+    onFullscreenToggle,
     t,
 }) {
     const [showLayers, setShowLayers] = useState(false);
@@ -31,12 +33,36 @@ export default function MapControls({
         <>
             {/* Zoom */}
             <div className="zoom-controls">
-                <button className="zoom-btn" onClick={onZoomIn} title={t.zoomIn} id="zoom-in-btn">+</button>
-                <button className="zoom-btn" onClick={onZoomOut} title={t.zoomOut} id="zoom-out-btn">−</button>
+                <button className="zoom-btn" onClick={onZoomIn} title={t.zoomIn} id="zoom-in-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+                <button className="zoom-btn" onClick={onZoomOut} title={t.zoomOut} id="zoom-out-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
             </div>
 
             {/* Controls */}
             <div className="map-controls">
+                {/* Waze-style Report Button */}
+                <button 
+                    className="map-control-btn report-btn" 
+                    onClick={() => { alert(t.reportHazard || 'Report feature coming soon!'); }} 
+                    title={t.reportHazard || 'Report'} 
+                    id="report-btn"
+                    style={{ background: 'var(--orange)', color: 'white', border: 'none', marginBottom: '8px' }}
+                >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" />
+                        <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                </button>
+
                 <button className="map-control-btn" onClick={onLocate} title={t.myLocation} id="locate-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="3" />
@@ -86,6 +112,30 @@ export default function MapControls({
                     style={{ fontSize: '12px', fontWeight: 700, fontFamily: 'Inter, sans-serif' }}
                 >
                     {t.language}
+                </button>
+
+                {/* Fullscreen Toggle */}
+                <button 
+                    className="map-control-btn" 
+                    onClick={onFullscreenToggle} 
+                    title={isFullscreen ? t.exitFullScreen : t.fullScreen} 
+                    id="fullscreen-btn"
+                >
+                    {isFullscreen ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="8 3 8 8 3 8" />
+                            <polyline points="16 3 16 8 21 8" />
+                            <polyline points="8 21 8 16 3 16" />
+                            <polyline points="16 21 16 16 21 16" />
+                        </svg>
+                    ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="15 3 21 3 21 9" />
+                            <polyline points="9 21 3 21 3 15" />
+                            <line x1="21" y1="3" x2="14" y2="10" />
+                            <line x1="3" y1="21" x2="10" y2="14" />
+                        </svg>
+                    )}
                 </button>
             </div>
 

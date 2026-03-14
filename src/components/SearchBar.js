@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { searchPlaces } from '@/lib/api';
 
-export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t }) {
+export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [isOpen, setIsOpen] = useState(false);
@@ -17,10 +17,10 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t }) {
             return;
         }
 
-        const places = await searchPlaces(value);
+        const places = await searchPlaces(value, lang);
         setResults(places);
         setIsOpen(places.length > 0);
-    }, []);
+    }, [lang]);
 
     const handleInputChange = (e) => {
         const value = e.target.value;
