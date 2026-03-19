@@ -110,7 +110,7 @@ export default function MapControls({
                 <div className="layers-popup" ref={layersRef} id="layers-popup">
                     <h3 className="layers-title">{t.mapType}</h3>
                     <div className="layers-grid">
-                        {['streets', 'satellite', 'terrain', 'dark'].map((layer) => (
+                        {['streets', 'satellite'].map((layer) => (
                             <button
                                 key={layer}
                                 className={`layer-option ${currentLayer === layer ? 'active' : ''}`}

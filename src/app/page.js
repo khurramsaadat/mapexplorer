@@ -103,8 +103,8 @@ export default function Home() {
     setSelectedPlace(null);
   }, []);
 
-  const handleRouteFound = useCallback((routes, activeIndex, originCoords, destCoords) => {
-    mapRef.current?.drawRoutes(routes, activeIndex, originCoords, destCoords);
+  const handleRouteFound = useCallback((routes, activeIndex, originCoords, destCoords, mode) => {
+    mapRef.current?.drawRoutes(routes, activeIndex, originCoords, destCoords, mode);
   }, []);
 
   const handleClearRoute = useCallback(() => {
@@ -187,25 +187,39 @@ export default function Home() {
 
   return (
     <>
-      {/* Navigation ETA Banner */}
+      {/* Navigation HUD */}
       {isNavigating && navRoute && (
-        <div className="nav-eta-banner" id="nav-eta-banner">
-          <div className="nav-eta-info">
-            <span className="nav-eta-time">{navRoute.duration}</span>
-            <div className="nav-eta-details">
-              <span className="nav-eta-distance">{navRoute.distance}</span>
-              <span className="nav-eta-arrival">ETA: {calculateETA(navRoute.rawDuration)}</span>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+          {/* Lane Assist (Waze style) */}
+          {navRoute.steps?.[0]?.lanes && (
+            <div className="lane-assist-banner">
+              <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '4px' }}>{t.keepInLanes || 'Keep in lanes'}</div>
+              <div className="lane-indicators">
+                {navRoute.steps[0].lanes.map((isValid, i) => (
+                  <div key={i} className={`lane-icon ${isValid ? 'valid' : 'invalid'}`}>↑</div>
+                ))}
+              </div>
             </div>
-          </div>
-          <div style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
-            {liveSpeed !== null && (
-               <div className="nav-speed" style={{fontSize: '20px', fontWeight: 'bold'}}>
-                 {liveSpeed} <span style={{fontSize: '12px', fontWeight: 'normal'}}>km/h</span>
-               </div>
-            )}
-            <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn">
-              End
-            </button>
+          )}
+
+          <div className="nav-eta-banner" id="nav-eta-banner" style={{ borderRadius: 0, boxShadow: 'none', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+            <div className="nav-eta-info">
+              <span className="nav-eta-time">{navRoute.duration}</span>
+              <div className="nav-eta-details">
+                <span className="nav-eta-distance">{navRoute.distance}</span>
+                <span className="nav-eta-arrival">ETA: {calculateETA(navRoute.rawDuration)}</span>
+              </div>
+            </div>
+            <div style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
+              {liveSpeed !== null && (
+                 <div className="nav-speed" style={{fontSize: '20px', fontWeight: 'bold', color: 'white'}}>
+                   {liveSpeed} <span style={{fontSize: '12px', fontWeight: 'normal'}}>km/h</span>
+                 </div>
+              )}
+              <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn" style={{ background: '#ea4335', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', fontWeight: 'bold' }}>
+                End
+              </button>
+            </div>
           </div>
         </div>
       )}

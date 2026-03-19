@@ -11,14 +11,6 @@ export const mapStyles = {
     url: null, // handled as custom raster source in MapView
     name: 'Satellite',
   },
-  terrain: {
-    url: 'https://tiles.openfreemap.org/styles/liberty',
-    name: 'Terrain',
-  },
-  dark: {
-    url: 'https://tiles.openfreemap.org/styles/dark',
-    name: 'Dark',
-  },
 };
 
 export const defaultCenter = [55.2708, 25.2048]; // [lng, lat] – Dubai (MapLibre uses lng,lat)

@@ -6,7 +6,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { mapStyles, defaultCenter, defaultZoom } from '@/lib/tiles';
 import { reverseGeocode } from '@/lib/api';
 
-const applyStyleTweaks = (map, isDarkMode) => {
+const applyStyleTweaks = (map) => {
     try {
         const style = map.getStyle();
         if (style && style.layers) {
@@ -29,11 +29,14 @@ const applyStyleTweaks = (map, isDarkMode) => {
                     }
                 }
 
-                // Fix dark mode white text halos to improve contrast and readability
-                if (isDarkMode) {
-                    if (layer.paint && (layer.paint['text-halo-color'] !== undefined || layer.paint['text-halo-width'] !== undefined)) {
-                        map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(0,0,0,0)');
+                // Aggressively remove white text halos globally to fulfill the "no white boxes" requirement
+                // We target all text layers and zero out halo-width and halo-blur completely
+                if (layer.type === 'symbol' && layer.paint) {
+                    if (layer.paint['text-halo-width'] !== undefined) {
                         map.setPaintProperty(layer.id, 'text-halo-width', 0);
+                    }
+                    if (layer.paint['text-halo-blur'] !== undefined) {
+                        map.setPaintProperty(layer.id, 'text-halo-blur', 0);
                     }
                 }
             });
@@ -88,8 +91,10 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             onMapClick?.(place);
         });
 
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-right');
+
         map.on('load', () => {
-            applyStyleTweaks(map, isDark);
+            applyStyleTweaks(map);
         });
 
         mapRef.current = map;
@@ -138,7 +143,7 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                 // Re-apply style tweaks after style loads
                 map.once('styledata', () => {
                     setTimeout(() => {
-                        applyStyleTweaks(map, currentLayer === 'dark' || isDark);
+                        applyStyleTweaks(map);
                     }, 500);
                 });
             }
@@ -173,7 +178,7 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             markersRef.current = [];
         },
 
-        drawRoutes(routes, activeIndex = 0, originCoords, destCoords) {
+        drawRoutes(routes, activeIndex = 0, originCoords, destCoords, mode = 'driving') {
             if (!mapRef.current || !routes || routes.length === 0) return;
             const map = mapRef.current;
 
@@ -198,14 +203,32 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                         },
                     });
 
-                    // Outline
-                    map.addLayer({
-                        id: outlineId,
-                        type: 'line',
-                        source: sourceId,
-                        layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': isActive ? '#ffffff' : '#aaaaaa', 'line-width': isActive ? 10 : 6, 'line-opacity': 0.9 },
-                    });
+                    let lineColor = isActive ? '#1a73e8' : '#70757a'; // Google Maps blue and grey
+                    let lineOpacity = isActive ? 1 : 0.6;
+                    let dashArray = undefined;
+                    
+                    if (isActive && mode === 'walking') {
+                        lineColor = '#4285f4'; 
+                        dashArray = [0.1, 1.5]; // blue dots
+                    } else if (isActive && mode === 'cycling') {
+                        lineColor = '#34a853'; 
+                        dashArray = [4, 4]; // green dashes
+                    }
+
+                    // Outline (skip for dotted walking lines)
+                    if (mode !== 'walking' || !isActive) {
+                        map.addLayer({
+                            id: outlineId,
+                            type: 'line',
+                            source: sourceId,
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: { 
+                                'line-color': isActive ? '#ffffff' : '#e8eaed', 
+                                'line-width': isActive ? 10 : 8, 
+                                'line-opacity': 0.8 
+                            },
+                        });
+                    }
 
                     // Main route
                     map.addLayer({
@@ -213,7 +236,12 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                         type: 'line',
                         source: sourceId,
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': isActive ? '#4285f4' : '#888888', 'line-width': isActive ? 6 : 4, 'line-opacity': isActive ? 1 : 0.6 },
+                        paint: { 
+                            'line-color': lineColor, 
+                            'line-width': isActive ? 6 : 5, 
+                            'line-opacity': lineOpacity,
+                            ...(dashArray ? { 'line-dasharray': dashArray } : {})
+                        },
                     });
                 });
 

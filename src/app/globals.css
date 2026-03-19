@@ -1104,6 +1104,54 @@ body {
 }
 
 /* ===== Responsive ===== */
+/* Lane Assist */
+.lane-assist-banner {
+    background: #004dcf;
+    color: white;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    z-index: 1000;
+}
+
+.lane-indicators {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.lane-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 40px;
+    font-size: 14px;
+    border: 1.5px solid rgba(255,255,255,0.3);
+}
+
+.lane-icon.valid {
+    background: white;
+    color: #4285f4;
+    border: none;
+    font-weight: bold;
+}
+
+.lane-icon.invalid {
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.4);
+}
+
+@media (max-width: 768px) {
+    .nav-eta-banner {
+        top: 0;
+        border-radius: 0;
+    }
+}
 @media (max-width: 768px) {
   .search-container {
     width: calc(100% - 32px);

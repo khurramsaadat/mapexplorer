@@ -198,12 +198,23 @@ export async function getDirections(startLat, startLon, endLat, endLon, mode = '
                                 ? (step.distance / 1000).toFixed(1) + ' km'
                                 : Math.round(step.distance) + ' m';
 
+                        let lanes = null;
+                        if (step.intersections) {
+                            for (const intersection of step.intersections) {
+                                if (intersection.lanes && intersection.lanes.length > 0) {
+                                    lanes = intersection.lanes.map(l => l.valid);
+                                    break; // Take the first meaningful lane instruction for the step
+                                }
+                            }
+                        }
+
                         steps.push({
                             instruction: step.maneuver.modifier 
                                 ? `${step.maneuver.type} ${step.maneuver.modifier}` 
                                 : step.maneuver.type,
                             distance: stepDist,
                             name: step.name || '',
+                            lanes: lanes,
                         });
                     });
                 }

@@ -98,7 +98,7 @@ export default function DirectionsPanel({
         if (result && result.length > 0) {
             setRoutes(result);
             setActiveRouteIndex(0);
-            onRouteFound?.(result, 0, originCoords, destCoords);
+            onRouteFound?.(result, 0, originCoords, destCoords, mode);
         } else {
             setRoutes(null);
             onClearRoute?.();
@@ -266,15 +266,14 @@ export default function DirectionsPanel({
 
             {routes && routes.length > 0 && !loading && (
                 <>
-                    {routes.length > 1 && (
-                        <div className="route-alternatives" style={{ display: 'flex', gap: '8px', padding: '0 20px 10px', overflowX: 'auto' }}>
-                            {routes.map((r, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => {
-                                        setActiveRouteIndex(i);
-                                        onRouteFound?.(routes, i, originCoords, destCoords);
-                                    }}
+                    <div className="route-alternatives" style={{ display: 'flex', gap: '8px', padding: '0 20px 10px', overflowX: 'auto' }}>
+                        {routes.map((r, i) => (
+                            <button
+                                key={i}
+                                onClick={() => {
+                                    setActiveRouteIndex(i);
+                                    onRouteFound?.(routes, i, originCoords, destCoords, mode);
+                                }}
                                     style={{
                                         padding: '8px 12px',
                                         borderRadius: '8px',
@@ -293,8 +292,7 @@ export default function DirectionsPanel({
                                     <span style={{ fontSize: '12px', opacity: i === activeRouteIndex ? 1 : 0.7 }}>{r.distance}</span>
                                 </button>
                             ))}
-                        </div>
-                    )}
+                    </div>
 
                     <div className="route-summary" id="route-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div className="route-info">
@@ -328,6 +326,18 @@ export default function DirectionsPanel({
                                 </div>
                                 <div className="step-info">
                                     <div className="step-instruction">{step.instruction}</div>
+                                    {step.lanes && (
+                                        <div className="lane-indicators">
+                                            {step.lanes.map((isValid, laneIdx) => (
+                                                <div 
+                                                    key={laneIdx} 
+                                                    className={`lane-icon ${isValid ? 'valid' : 'invalid'}`}
+                                                >
+                                                    ↑
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                     <div className="step-distance">{step.distance}</div>
                                 </div>
                             </div>
