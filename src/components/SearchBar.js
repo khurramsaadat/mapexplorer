@@ -6,9 +6,17 @@ import { searchPlaces } from '@/lib/api';
 export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
+    const [history, setHistory] = useState([]);
     const [isOpen, setIsOpen] = useState(false);
     const debounceRef = useRef(null);
     const inputRef = useRef(null);
+
+    useEffect(() => {
+        const saved = localStorage.getItem('search_history');
+        if (saved) {
+            try { setHistory(JSON.parse(saved)); } catch (e) { }
+        }
+    }, []);
 
     const handleSearch = useCallback(async (value) => {
         if (value.trim().length < 2) {
@@ -34,6 +42,14 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
         setQuery(place.name);
         setResults([]);
         setIsOpen(false);
+        
+        // Save to history
+        setHistory(prev => {
+            const newHistory = [place, ...prev.filter(p => p.id !== place.id)].slice(0, 5);
+            localStorage.setItem('search_history', JSON.stringify(newHistory));
+            return newHistory;
+        });
+
         onPlaceSelect?.(place);
     };
 
@@ -72,7 +88,9 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
                     autoComplete="off"
                     value={query}
                     onChange={handleInputChange}
-                    onFocus={() => results.length > 0 && setIsOpen(true)}
+                    onFocus={() => {
+                        if (results.length > 0 || (!query && history.length > 0)) setIsOpen(true);
+                    }}
                     id="search-input"
                 />
 
@@ -97,8 +115,9 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
                 </button>
             </div>
 
-            {isOpen && results.length > 0 && (
+            {isOpen && (results.length > 0 || (!query && history.length > 0)) && (
                 <div className="search-results" id="search-results">
+                    {/* Render Results */}
                     {results.map((place) => (
                         <div
                             key={place.id}
@@ -114,6 +133,26 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
                             <div className="result-info">
                                 <div className="result-name">{place.name}</div>
                                 <div className="result-address">{place.fullAddress}</div>
+                            </div>
+                        </div>
+                    ))}
+
+                    {/* Render History when no query and no results */}
+                    {!query && results.length === 0 && history.map((place) => (
+                        <div
+                            key={`hist-${place.id}`}
+                            className="search-result-item"
+                            onClick={() => handleSelect(place)}
+                        >
+                            <div className="result-icon" style={{opacity: 0.6}}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                            </div>
+                            <div className="result-info">
+                                <div className="result-name">{place.name}</div>
+                                <div className="result-address" style={{opacity: 0.6}}>{place.fullAddress}</div>
                             </div>
                         </div>
                     ))}

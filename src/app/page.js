@@ -51,6 +51,8 @@ export default function Home() {
   // Navigation state
   const [isNavigating, setIsNavigating] = useState(false);
   const [navRoute, setNavRoute] = useState(null);
+  const [liveSpeed, setLiveSpeed] = useState(null);
+  const watchIdRef = useRef(null);
 
   // Sync fullscreen state with DOM api if user presses Esc
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function Home() {
     const dark = shouldBeDark();
     setIsDark(dark);
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    if (dark) setCurrentLayer('dark');
   }, []);
 
   // Update direction attribute when language changes
@@ -100,8 +103,8 @@ export default function Home() {
     setSelectedPlace(null);
   }, []);
 
-  const handleRouteFound = useCallback((route, originCoords, destCoords) => {
-    mapRef.current?.drawRoute(route.geometry, originCoords, destCoords);
+  const handleRouteFound = useCallback((routes, activeIndex, originCoords, destCoords) => {
+    mapRef.current?.drawRoutes(routes, activeIndex, originCoords, destCoords);
   }, []);
 
   const handleClearRoute = useCallback(() => {
@@ -119,6 +122,20 @@ export default function Home() {
     setIsNavigating(true);
     setNavRoute(route);
     setDirectionsOpen(false);
+    
+    // Start speed tracking
+    if (navigator.geolocation) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          if (pos.coords.speed !== null) {
+            // speed is in m/s, convert to km/h
+            setLiveSpeed(Math.round(pos.coords.speed * 3.6));
+          }
+        },
+        null,
+        { enableHighAccuracy: true, maximumAge: 0 }
+      );
+    }
     showToast('Navigation started! 🚗');
   }, [showToast]);
 
@@ -126,6 +143,11 @@ export default function Home() {
   const handleEndJourney = useCallback(() => {
     setIsNavigating(false);
     setNavRoute(null);
+    setLiveSpeed(null);
+    if (watchIdRef.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
     mapRef.current?.clearRoute();
     showToast('Navigation ended');
   }, [showToast]);
@@ -140,14 +162,6 @@ export default function Home() {
   const handleLayerChange = useCallback((layer) => {
     setCurrentLayer(layer);
   }, []);
-
-  // Theme
-  const handleThemeToggle = useCallback(() => {
-    const newDark = !isDark;
-    setIsDark(newDark);
-    document.documentElement.setAttribute('data-theme', newDark ? 'dark' : 'light');
-    setCurrentLayer(newDark ? 'dark' : 'streets');
-  }, [isDark]);
 
   // Language
   const handleLangToggle = useCallback(() => {
@@ -183,9 +197,16 @@ export default function Home() {
               <span className="nav-eta-arrival">ETA: {calculateETA(navRoute.rawDuration)}</span>
             </div>
           </div>
-          <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn">
-            End
-          </button>
+          <div style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
+            {liveSpeed !== null && (
+               <div className="nav-speed" style={{fontSize: '20px', fontWeight: 'bold'}}>
+                 {liveSpeed} <span style={{fontSize: '12px', fontWeight: 'normal'}}>km/h</span>
+               </div>
+            )}
+            <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn">
+              End
+            </button>
+          </div>
         </div>
       )}
 
@@ -222,8 +243,6 @@ export default function Home() {
           onLocate={handleLocate}
           onLayerChange={handleLayerChange}
           currentLayer={currentLayer}
-          onThemeToggle={handleThemeToggle}
-          isDark={isDark}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           lang={lang}

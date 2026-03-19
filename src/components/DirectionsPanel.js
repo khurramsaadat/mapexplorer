@@ -18,7 +18,8 @@ export default function DirectionsPanel({
     const [originCoords, setOriginCoords] = useState(null);
     const [destCoords, setDestCoords] = useState(null);
     const [mode, setMode] = useState('driving');
-    const [route, setRoute] = useState(null);
+    const [routes, setRoutes] = useState(null);
+    const [activeRouteIndex, setActiveRouteIndex] = useState(0);
     const [loading, setLoading] = useState(false);
 
     const [activeInput, setActiveInput] = useState(null);
@@ -94,11 +95,12 @@ export default function DirectionsPanel({
         );
         setLoading(false);
 
-        if (result) {
-            setRoute(result);
-            onRouteFound?.(result, originCoords, destCoords);
+        if (result && result.length > 0) {
+            setRoutes(result);
+            setActiveRouteIndex(0);
+            onRouteFound?.(result, 0, originCoords, destCoords);
         } else {
-            setRoute(null);
+            setRoutes(null);
             onClearRoute?.();
         }
     }, [originCoords, destCoords, mode, onRouteFound, onClearRoute]);
@@ -119,7 +121,7 @@ export default function DirectionsPanel({
         setDestination('');
         setOriginCoords(null);
         setDestCoords(null);
-        setRoute(null);
+        setRoutes(null);
         setAutoResults([]);
         onClearRoute?.();
         onClose?.();
@@ -262,24 +264,54 @@ export default function DirectionsPanel({
                 </div>
             )}
 
-            {route && !loading && (
+            {routes && routes.length > 0 && !loading && (
                 <>
+                    {routes.length > 1 && (
+                        <div className="route-alternatives" style={{ display: 'flex', gap: '8px', padding: '0 20px 10px', overflowX: 'auto' }}>
+                            {routes.map((r, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => {
+                                        setActiveRouteIndex(i);
+                                        onRouteFound?.(routes, i, originCoords, destCoords);
+                                    }}
+                                    style={{
+                                        padding: '8px 12px',
+                                        borderRadius: '8px',
+                                        border: i === activeRouteIndex ? '2px solid #4285f4' : '1px solid var(--border)',
+                                        background: i === activeRouteIndex ? 'rgba(66, 133, 244, 0.1)' : 'transparent',
+                                        cursor: 'pointer',
+                                        minWidth: '100px',
+                                        flexShrink: 0,
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    <span style={{ fontWeight: 'bold', color: i === activeRouteIndex ? '#4285f4' : 'inherit' }}>{r.duration}</span>
+                                    <span style={{ fontSize: '12px', opacity: i === activeRouteIndex ? 1 : 0.7 }}>{r.distance}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     <div className="route-summary" id="route-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div className="route-info">
-                            <span className="route-duration" id="route-duration">{route.duration}</span>
-                            <span className="route-distance" id="route-distance">{route.distance}</span>
+                            <span className="route-duration" id="route-duration">{routes[activeRouteIndex].duration}</span>
+                            <span className="route-distance" id="route-distance">{routes[activeRouteIndex].distance}</span>
                         </div>
                         <button
                             className="start-journey-btn"
                             id="start-journey-btn"
-                            onClick={() => onStartJourney?.(route)}
+                            onClick={() => onStartJourney?.(routes[activeRouteIndex])}
                         >
                             {t.startTrip || 'Start'}
                         </button>
                     </div>
 
                     <div className="directions-steps" id="directions-steps">
-                        {route.steps.map((step, i) => (
+                        {routes[activeRouteIndex].steps.map((step, i) => (
                             <div key={i} className="direction-step">
                                 <div className="step-icon">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

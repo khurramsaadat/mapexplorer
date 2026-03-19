@@ -154,55 +154,75 @@ export async function reverseGeocode(lat, lon, lang = 'en') {
  * Get routing directions using OSRM
  * @param {string} profile - 'driving' | 'walking' | 'cycling'
  */
-export async function getDirections(originLat, originLon, destLat, destLon, profile = 'driving') {
-  try {
-    // OSRM uses driving/foot/bike
-    const osrmProfile =
-      profile === 'walking' ? 'foot' : profile === 'cycling' ? 'bike' : 'driving';
-
-    const coords = `${originLon},${originLat};${destLon},${destLat}`;
-    const params = new URLSearchParams({
-      overview: 'full',
-      geometries: 'geojson',
-      steps: 'true',
-    });
-
-    const res = await fetch(
-      `${OSRM_BASE}/route/v1/${osrmProfile}/${coords}?${params}`,
-      { headers: { 'User-Agent': 'MapExplorer/1.0' } }
-    );
-
-    if (!res.ok) throw new Error('Routing failed');
-    const data = await res.json();
-
-    if (data.code !== 'Ok' || !data.routes?.length) {
-      throw new Error('No route found');
-    }
-
-    const route = data.routes[0];
-    const steps = route.legs[0].steps.map((step) => ({
-      instruction: step.maneuver.type === 'depart'
-        ? 'Start your trip'
-        : step.maneuver.type === 'arrive'
-          ? 'You have arrived'
-          : formatInstruction(step),
-      distance: formatDistance(step.distance),
-      duration: formatDuration(step.duration),
-      maneuver: step.maneuver,
-    }));
-
-    return {
-      distance: formatDistance(route.distance),
-      duration: formatDuration(route.duration),
-      rawDuration: route.duration,
-      rawDistance: route.distance,
-      geometry: route.geometry,
-      steps,
+export async function getDirections(startLat, startLon, endLat, endLon, mode = 'driving', numAlternatives = 3) {
+    const profiles = {
+        driving: 'driving-car',
+        walking: 'foot-walking',
+        cycling: 'cycling-regular',
     };
-  } catch (err) {
-    console.error('Routing error:', err);
-    return null;
-  }
+    const profile = profiles[mode] || 'driving-car';
+
+    // ORS requires coordinates in [lon, lat] format
+    const startCoords = `${startLon},${startLat}`;
+    const endCoords = `${endLon},${endLat}`;
+    // Using OSRM for directions
+    // OSRM default public API supports car, foot, bike depending on the endpoint
+    const osrmProfile = mode === 'walking' ? 'foot' : mode === 'cycling' ? 'bike' : 'car';
+    const osrmUrl = `https://router.project-osrm.org/route/v1/${osrmProfile}/${startCoords};${endCoords}?overview=full&geometries=geojson&steps=true&alternatives=${numAlternatives}`;
+
+    try {
+        const response = await fetch(osrmUrl);
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const data = await response.json();
+        
+        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+            return data.routes.map(route => {
+                const distance =
+                    route.distance > 1000
+                        ? (route.distance / 1000).toFixed(1) + ' km'
+                        : Math.round(route.distance) + ' m';
+
+                const rawDuration = route.duration;
+                const durationMinutes = Math.round(rawDuration / 60);
+                const duration =
+                    durationMinutes > 60
+                        ? `${Math.floor(durationMinutes / 60)} hr ${durationMinutes % 60} min`
+                        : `${durationMinutes} min`;
+
+                const steps = [];
+                if (route.legs && route.legs.length > 0) {
+                    route.legs[0].steps.forEach((step) => {
+                        const stepDist =
+                            step.distance > 1000
+                                ? (step.distance / 1000).toFixed(1) + ' km'
+                                : Math.round(step.distance) + ' m';
+
+                        steps.push({
+                            instruction: step.maneuver.modifier 
+                                ? `${step.maneuver.type} ${step.maneuver.modifier}` 
+                                : step.maneuver.type,
+                            distance: stepDist,
+                            name: step.name || '',
+                        });
+                    });
+                }
+                
+                return {
+                    distance,
+                    duration,
+                    rawDuration,
+                    geometry: route.geometry,
+                    steps,
+                    weight: route.weight || route.duration,
+                };
+            });
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching directions:', error);
+        return null;
+    }
 }
 
 function formatInstruction(step) {

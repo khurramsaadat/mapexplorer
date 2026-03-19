@@ -6,6 +6,43 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { mapStyles, defaultCenter, defaultZoom } from '@/lib/tiles';
 import { reverseGeocode } from '@/lib/api';
 
+const applyStyleTweaks = (map, isDarkMode) => {
+    try {
+        const style = map.getStyle();
+        if (style && style.layers) {
+            style.layers.forEach((layer) => {
+                // Force English labels
+                if (layer.layout && layer.layout['text-field']) {
+                    map.setLayoutProperty(layer.id, 'text-field', [
+                        'coalesce',
+                        ['get', 'name:en'],
+                        ['get', 'name_en'],
+                        ['get', 'name:latin'],
+                        ['get', 'name'],
+                    ]);
+                }
+
+                // Expose more POIs at lower zooms by reducing minzoom by 2 levels (min 0)
+                if (layer.id.includes('poi') || (layer['source-layer'] && layer['source-layer'].includes('poi'))) {
+                    if (layer.minzoom !== undefined) {
+                        map.setLayerZoomRange(layer.id, Math.max(0, layer.minzoom - 2), layer.maxzoom || 24);
+                    }
+                }
+
+                // Fix dark mode white text halos to improve contrast and readability
+                if (isDarkMode) {
+                    if (layer.paint && (layer.paint['text-halo-color'] !== undefined || layer.paint['text-halo-width'] !== undefined)) {
+                        map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(0,0,0,0)');
+                        map.setPaintProperty(layer.id, 'text-halo-width', 0);
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        console.warn('Could not apply map style tweaks', e);
+    }
+};
+
 const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, isDark }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
@@ -52,21 +89,7 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
         });
 
         map.on('load', () => {
-            // Force English labels on all text layers
-            const style = map.getStyle();
-            if (style && style.layers) {
-                style.layers.forEach((layer) => {
-                    if (layer.layout && layer.layout['text-field']) {
-                        map.setLayoutProperty(layer.id, 'text-field', [
-                            'coalesce',
-                            ['get', 'name:en'],
-                            ['get', 'name_en'],
-                            ['get', 'name:latin'],
-                            ['get', 'name'],
-                        ]);
-                    }
-                });
-            }
+            applyStyleTweaks(map, isDark);
         });
 
         mapRef.current = map;
@@ -112,27 +135,10 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             const styleConfig = mapStyles[currentLayer];
             if (styleConfig?.url) {
                 map.setStyle(styleConfig.url);
-                // Re-apply English labels after style loads
+                // Re-apply style tweaks after style loads
                 map.once('styledata', () => {
                     setTimeout(() => {
-                        try {
-                            const style = map.getStyle();
-                            if (style && style.layers) {
-                                style.layers.forEach((layer) => {
-                                    if (layer.layout && layer.layout['text-field']) {
-                                        map.setLayoutProperty(layer.id, 'text-field', [
-                                            'coalesce',
-                                            ['get', 'name:en'],
-                                            ['get', 'name_en'],
-                                            ['get', 'name:latin'],
-                                            ['get', 'name'],
-                                        ]);
-                                    }
-                                });
-                            }
-                        } catch (e) {
-                            // Style may not be fully loaded yet
-                        }
+                        applyStyleTweaks(map, currentLayer === 'dark' || isDark);
                     }, 500);
                 });
             }
@@ -167,58 +173,53 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             markersRef.current = [];
         },
 
-        drawRoute(geometry, originCoords, destCoords) {
-            if (!mapRef.current) return;
+        drawRoutes(routes, activeIndex = 0, originCoords, destCoords) {
+            if (!mapRef.current || !routes || routes.length === 0) return;
             const map = mapRef.current;
 
             // Clear previous
             this.clearRoute();
 
             // Wait for style to be loaded
-            const addRouteLayer = () => {
-                // Add route source
-                if (!map.getSource('route')) {
-                    map.addSource('route', {
+            const addRouteLayers = () => {
+                // Draw inactive routes first so they are under the active one
+                routes.forEach((route, index) => {
+                    const isActive = index === activeIndex;
+                    const sourceId = `route-${index}`;
+                    const outlineId = `route-outline-${index}`;
+                    const lineId = `route-line-${index}`;
+
+                    map.addSource(sourceId, {
                         type: 'geojson',
                         data: {
                             type: 'Feature',
                             properties: {},
-                            geometry: geometry,
+                            geometry: route.geometry,
                         },
                     });
-                } else {
-                    map.getSource('route').setData({
-                        type: 'Feature',
-                        properties: {},
-                        geometry: geometry,
-                    });
-                }
 
-                // Outline
-                if (!map.getLayer('route-outline')) {
+                    // Outline
                     map.addLayer({
-                        id: 'route-outline',
+                        id: outlineId,
                         type: 'line',
-                        source: 'route',
+                        source: sourceId,
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': '#ffffff', 'line-width': 10, 'line-opacity': 0.9 },
+                        paint: { 'line-color': isActive ? '#ffffff' : '#aaaaaa', 'line-width': isActive ? 10 : 6, 'line-opacity': 0.9 },
                     });
-                }
 
-                // Main route
-                if (!map.getLayer('route-line')) {
+                    // Main route
                     map.addLayer({
-                        id: 'route-line',
+                        id: lineId,
                         type: 'line',
-                        source: 'route',
+                        source: sourceId,
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': '#4285f4', 'line-width': 6, 'line-opacity': 1 },
+                        paint: { 'line-color': isActive ? '#4285f4' : '#888888', 'line-width': isActive ? 6 : 4, 'line-opacity': isActive ? 1 : 0.6 },
                     });
-                }
+                });
 
-                routeLayerRef.current = true;
+                routeLayerRef.current = { count: routes.length };
 
-                // Add origin & destination markers
+                // Add origin & destination markers based on the active route
                 if (originCoords) {
                     this.addMarker(originCoords.lat, originCoords.lon, 'Origin', 'green');
                 }
@@ -226,8 +227,8 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                     this.addMarker(destCoords.lat, destCoords.lon, 'Destination', 'red');
                 }
 
-                // Fit bounds
-                const coords = geometry.coordinates;
+                // Fit bounds to the active route
+                const coords = routes[activeIndex].geometry.coordinates;
                 const bounds = coords.reduce(
                     (b, coord) => b.extend(coord),
                     new maplibregl.LngLatBounds(coords[0], coords[0])
@@ -236,18 +237,21 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             };
 
             if (map.isStyleLoaded()) {
-                addRouteLayer();
+                addRouteLayers();
             } else {
-                map.once('load', addRouteLayer);
+                map.once('load', addRouteLayers);
             }
         },
 
         clearRoute() {
             if (mapRef.current && routeLayerRef.current) {
                 try {
-                    if (mapRef.current.getLayer('route-line')) mapRef.current.removeLayer('route-line');
-                    if (mapRef.current.getLayer('route-outline')) mapRef.current.removeLayer('route-outline');
-                    if (mapRef.current.getSource('route')) mapRef.current.removeSource('route');
+                    const count = routeLayerRef.current.count || 3;
+                    for (let i = 0; i < count; i++) {
+                        if (mapRef.current.getLayer(`route-line-${i}`)) mapRef.current.removeLayer(`route-line-${i}`);
+                        if (mapRef.current.getLayer(`route-outline-${i}`)) mapRef.current.removeLayer(`route-outline-${i}`);
+                        if (mapRef.current.getSource(`route-${i}`)) mapRef.current.removeSource(`route-${i}`);
+                    }
                 } catch (e) {
                     // Layers may not exist
                 }
