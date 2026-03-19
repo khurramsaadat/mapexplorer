@@ -1,57 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { tileLayers, defaultCenter, defaultZoom } from '@/lib/tiles';
+import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { mapStyles, defaultCenter, defaultZoom } from '@/lib/tiles';
 import { reverseGeocode } from '@/lib/api';
-
-// Fix default marker icon issue in Leaflet + webpack/next
-const defaultIcon = L.icon({
-    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-    iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-});
-
-const blueIcon = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-});
-
-const redIcon = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-});
-
-const greenIcon = L.icon({
-    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
-    shadowSize: [41, 41],
-});
-
-L.Marker.prototype.options.icon = defaultIcon;
 
 const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, isDark }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
-    const tileLayerRef = useRef(null);
     const markersRef = useRef([]);
-    const routeLayerRef = useRef(null);
+    const routeLayerRef = useRef(false);
     const locationMarkerRef = useRef(null);
     const locationCircleRef = useRef(null);
     const langRef = useRef(lang);
@@ -65,36 +24,49 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
         if (mapRef.current) return;
 
         // Restore state from localStorage
-        const savedLat = parseFloat(localStorage.getItem('map_lat')) || defaultCenter[0];
-        const savedLng = parseFloat(localStorage.getItem('map_lng')) || defaultCenter[1];
+        const savedLng = parseFloat(localStorage.getItem('map_lng')) || defaultCenter[0];
+        const savedLat = parseFloat(localStorage.getItem('map_lat')) || defaultCenter[1];
         const savedZoom = parseInt(localStorage.getItem('map_zoom')) || defaultZoom;
 
-        const map = L.map(mapContainerRef.current, {
-            center: [savedLat, savedLng],
+        const map = new maplibregl.Map({
+            container: mapContainerRef.current,
+            style: mapStyles.streets.url,
+            center: [savedLng, savedLat],
             zoom: savedZoom,
-            zoomControl: false,
             attributionControl: true,
         });
-
-        const layer = tileLayers.streets;
-        tileLayerRef.current = L.tileLayer(layer.url, {
-            attribution: layer.attribution,
-            maxZoom: 19,
-        }).addTo(map);
 
         // Save state on move
         map.on('moveend', () => {
             const center = map.getCenter();
             localStorage.setItem('map_lat', center.lat.toString());
             localStorage.setItem('map_lng', center.lng.toString());
-            localStorage.setItem('map_zoom', map.getZoom().toString());
+            localStorage.setItem('map_zoom', Math.round(map.getZoom()).toString());
         });
 
         // Click to explore
         map.on('click', async (e) => {
-            const { lat, lng } = e.latlng;
+            const { lat, lng } = e.lngLat;
             const place = await reverseGeocode(lat, lng, langRef.current);
             onMapClick?.(place);
+        });
+
+        map.on('load', () => {
+            // Force English labels on all text layers
+            const style = map.getStyle();
+            if (style && style.layers) {
+                style.layers.forEach((layer) => {
+                    if (layer.layout && layer.layout['text-field']) {
+                        map.setLayoutProperty(layer.id, 'text-field', [
+                            'coalesce',
+                            ['get', 'name:en'],
+                            ['get', 'name_en'],
+                            ['get', 'name:latin'],
+                            ['get', 'name'],
+                        ]);
+                    }
+                });
+            }
         });
 
         mapRef.current = map;
@@ -105,131 +77,251 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Change tile layer
+    // Change style/layer
     useEffect(() => {
         if (!mapRef.current || !currentLayer) return;
-        const layer = tileLayers[currentLayer];
-        if (!layer) return;
+        const map = mapRef.current;
 
-        if (tileLayerRef.current) {
-            mapRef.current.removeLayer(tileLayerRef.current);
+        if (currentLayer === 'satellite') {
+            // Custom raster style for satellite imagery
+            const satelliteStyle = {
+                version: 8,
+                sources: {
+                    'esri-satellite': {
+                        type: 'raster',
+                        tiles: [
+                            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                        ],
+                        tileSize: 256,
+                        attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+                        maxzoom: 19,
+                    },
+                },
+                layers: [
+                    {
+                        id: 'esri-satellite-layer',
+                        type: 'raster',
+                        source: 'esri-satellite',
+                        minzoom: 0,
+                        maxzoom: 19,
+                    },
+                ],
+            };
+            map.setStyle(satelliteStyle);
+        } else {
+            const styleConfig = mapStyles[currentLayer];
+            if (styleConfig?.url) {
+                map.setStyle(styleConfig.url);
+                // Re-apply English labels after style loads
+                map.once('styledata', () => {
+                    setTimeout(() => {
+                        try {
+                            const style = map.getStyle();
+                            if (style && style.layers) {
+                                style.layers.forEach((layer) => {
+                                    if (layer.layout && layer.layout['text-field']) {
+                                        map.setLayoutProperty(layer.id, 'text-field', [
+                                            'coalesce',
+                                            ['get', 'name:en'],
+                                            ['get', 'name_en'],
+                                            ['get', 'name:latin'],
+                                            ['get', 'name'],
+                                        ]);
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            // Style may not be fully loaded yet
+                        }
+                    }, 500);
+                });
+            }
         }
-        tileLayerRef.current = L.tileLayer(layer.url, {
-            attribution: layer.attribution,
-            maxZoom: 19,
-        }).addTo(mapRef.current);
     }, [currentLayer]);
 
     // Expose methods to parent
     useImperativeHandle(ref, () => ({
         flyTo(lat, lon, zoom = 16) {
-            mapRef.current?.flyTo([lat, lon], zoom, { duration: 1.5 });
+            mapRef.current?.flyTo({ center: [lon, lat], zoom, duration: 1500 });
         },
 
-        addMarker(lat, lon, popupText, icon = 'default') {
+        addMarker(lat, lon, popupText, iconColor = 'default') {
             if (!mapRef.current) return;
-            const iconMap = { blue: blueIcon, red: redIcon, green: greenIcon, default: defaultIcon };
-            const marker = L.marker([lat, lon], { icon: iconMap[icon] || defaultIcon })
+            const colorMap = { blue: '#4285f4', red: '#ea4335', green: '#34a853', default: '#5f6368' };
+            const color = colorMap[iconColor] || colorMap.default;
+
+            const marker = new maplibregl.Marker({ color })
+                .setLngLat([lon, lat])
                 .addTo(mapRef.current);
-            if (popupText) marker.bindPopup(popupText);
+
+            if (popupText) {
+                const popup = new maplibregl.Popup({ offset: 25 }).setHTML(popupText);
+                marker.setPopup(popup);
+            }
             markersRef.current.push(marker);
             return marker;
         },
 
         clearMarkers() {
-            markersRef.current.forEach((m) => mapRef.current?.removeLayer(m));
+            markersRef.current.forEach((m) => m.remove());
             markersRef.current = [];
         },
 
         drawRoute(geometry, originCoords, destCoords) {
             if (!mapRef.current) return;
+            const map = mapRef.current;
 
             // Clear previous
             this.clearRoute();
 
-            // Draw polyline with Waze thick styling
-            const coords = geometry.coordinates.map(([lon, lat]) => [lat, lon]);
-            
-            const outline = L.polyline(coords, {
-                color: '#ffffff',
-                weight: 10,
-                opacity: 0.9,
-                lineCap: 'round',
-                lineJoin: 'round',
-            });
+            // Wait for style to be loaded
+            const addRouteLayer = () => {
+                // Add route source
+                if (!map.getSource('route')) {
+                    map.addSource('route', {
+                        type: 'geojson',
+                        data: {
+                            type: 'Feature',
+                            properties: {},
+                            geometry: geometry,
+                        },
+                    });
+                } else {
+                    map.getSource('route').setData({
+                        type: 'Feature',
+                        properties: {},
+                        geometry: geometry,
+                    });
+                }
 
-            const path = L.polyline(coords, {
-                color: '#9b59b6', // Waze-ish purple
-                weight: 6,
-                opacity: 1,
-                lineCap: 'round',
-                lineJoin: 'round',
-            });
+                // Outline
+                if (!map.getLayer('route-outline')) {
+                    map.addLayer({
+                        id: 'route-outline',
+                        type: 'line',
+                        source: 'route',
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 'line-color': '#ffffff', 'line-width': 10, 'line-opacity': 0.9 },
+                    });
+                }
 
-            routeLayerRef.current = L.featureGroup([outline, path]).addTo(mapRef.current);
+                // Main route
+                if (!map.getLayer('route-line')) {
+                    map.addLayer({
+                        id: 'route-line',
+                        type: 'line',
+                        source: 'route',
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 'line-color': '#4285f4', 'line-width': 6, 'line-opacity': 1 },
+                    });
+                }
 
-            // Add origin & destination markers
-            if (originCoords) {
-                this.addMarker(originCoords.lat, originCoords.lon, 'Origin', 'green');
+                routeLayerRef.current = true;
+
+                // Add origin & destination markers
+                if (originCoords) {
+                    this.addMarker(originCoords.lat, originCoords.lon, 'Origin', 'green');
+                }
+                if (destCoords) {
+                    this.addMarker(destCoords.lat, destCoords.lon, 'Destination', 'red');
+                }
+
+                // Fit bounds
+                const coords = geometry.coordinates;
+                const bounds = coords.reduce(
+                    (b, coord) => b.extend(coord),
+                    new maplibregl.LngLatBounds(coords[0], coords[0])
+                );
+                map.fitBounds(bounds, { padding: 60, duration: 1000 });
+            };
+
+            if (map.isStyleLoaded()) {
+                addRouteLayer();
+            } else {
+                map.once('load', addRouteLayer);
             }
-            if (destCoords) {
-                this.addMarker(destCoords.lat, destCoords.lon, 'Destination', 'red');
-            }
-
-            // Fit bounds
-            mapRef.current.fitBounds(routeLayerRef.current.getBounds(), { padding: [60, 60] });
         },
 
         clearRoute() {
-            if (routeLayerRef.current && mapRef.current) {
-                mapRef.current.removeLayer(routeLayerRef.current);
-                routeLayerRef.current = null;
+            if (mapRef.current && routeLayerRef.current) {
+                try {
+                    if (mapRef.current.getLayer('route-line')) mapRef.current.removeLayer('route-line');
+                    if (mapRef.current.getLayer('route-outline')) mapRef.current.removeLayer('route-outline');
+                    if (mapRef.current.getSource('route')) mapRef.current.removeSource('route');
+                } catch (e) {
+                    // Layers may not exist
+                }
+                routeLayerRef.current = false;
             }
             this.clearMarkers();
         },
 
         locateUser() {
-            mapRef.current.locate({ 
-                setView: true, 
-                maxZoom: 16, 
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0
-            });
+            if (!navigator.geolocation) return;
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const { latitude: lat, longitude: lng } = pos.coords;
+                    const accuracy = pos.coords.accuracy;
+                    const map = mapRef.current;
+                    if (!map) return;
 
-            mapRef.current.once('locationfound', (e) => {
-                const { lat, lng } = e.latlng;
-                const accuracy = e.accuracy;
+                    map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
 
-                // Remove old location markers
-                if (locationMarkerRef.current) mapRef.current.removeLayer(locationMarkerRef.current);
-                if (locationCircleRef.current) mapRef.current.removeLayer(locationCircleRef.current);
+                    // Remove old location markers
+                    if (locationMarkerRef.current) locationMarkerRef.current.remove();
+                    if (locationCircleRef.current) {
+                        try {
+                            if (map.getLayer('location-circle')) map.removeLayer('location-circle');
+                            if (map.getSource('location-circle')) map.removeSource('location-circle');
+                        } catch (e) { /* ignore */ }
+                    }
 
-                // Accuracy circle
-                locationCircleRef.current = L.circle([lat, lng], {
-                    radius: accuracy,
-                    color: '#4285f4',
-                    fillColor: '#4285f4',
-                    fillOpacity: 0.1,
-                    weight: 1,
-                }).addTo(mapRef.current);
+                    // Add accuracy circle as a GeoJSON source
+                    const addLocationMarkers = () => {
+                        try {
+                            map.addSource('location-circle', {
+                                type: 'geojson',
+                                data: {
+                                    type: 'Feature',
+                                    geometry: { type: 'Point', coordinates: [lng, lat] },
+                                    properties: {},
+                                },
+                            });
+                            map.addLayer({
+                                id: 'location-circle',
+                                type: 'circle',
+                                source: 'location-circle',
+                                paint: {
+                                    'circle-radius': Math.min(accuracy / 2, 50),
+                                    'circle-color': '#4285f4',
+                                    'circle-opacity': 0.1,
+                                    'circle-stroke-width': 1,
+                                    'circle-stroke-color': '#4285f4',
+                                },
+                            });
+                            locationCircleRef.current = true;
+                        } catch (e) { /* ignore */ }
+                    };
 
-                // Location dot
-                const pulseIcon = L.divIcon({
-                    className: 'location-pulse-container',
-                    html: '<div class="location-pulse"></div>',
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10],
-                });
+                    if (map.isStyleLoaded()) {
+                        addLocationMarkers();
+                    } else {
+                        map.once('load', addLocationMarkers);
+                    }
 
-                locationMarkerRef.current = L.marker([lat, lng], { icon: pulseIcon })
-                    .addTo(mapRef.current)
-                    .bindPopup('You are here');
-            });
-
-            mapRef.current.once('locationerror', (e) => {
-                console.warn('Location access denied or timed out:', e.message);
-            });
+                    // Location dot (pulsing via CSS)
+                    const el = document.createElement('div');
+                    el.className = 'location-pulse-container';
+                    el.innerHTML = '<div class="location-pulse"></div>';
+                    locationMarkerRef.current = new maplibregl.Marker({ element: el })
+                        .setLngLat([lng, lat])
+                        .addTo(map);
+                },
+                (err) => {
+                    console.warn('Location access denied or timed out:', err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
         },
 
         zoomIn() {

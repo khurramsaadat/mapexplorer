@@ -8,6 +8,7 @@ export default function DirectionsPanel({
     onClose,
     onRouteFound,
     onClearRoute,
+    onStartJourney,
     initialDestination,
     t,
     lang,
@@ -31,22 +32,22 @@ export default function DirectionsPanel({
         }
     }, [initialDestination, isOpen]);
 
-    // Auto-fill origin if user previously granted location consent
+    // Auto-detect location when directions panel opens
     useEffect(() => {
-        if (isOpen && !origin) {
-            const consent = localStorage.getItem('location_consent');
-            if (consent === 'granted' && navigator.geolocation) {
+        if (isOpen && !origin && !originCoords) {
+            if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
                         setOrigin(t.yourLocation);
                         setOriginCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                        localStorage.setItem('location_consent', 'granted');
                     },
-                    () => { }, // silently fail if expired/revoked
-                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                    () => { }, // silently fail
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                 );
             }
         }
-    }, [isOpen, origin, t.yourLocation]);
+    }, [isOpen, origin, originCoords, t.yourLocation]);
 
     const handleInputChange = useCallback((field, value) => {
         if (field === 'origin') {
@@ -100,7 +101,7 @@ export default function DirectionsPanel({
             setRoute(null);
             onClearRoute?.();
         }
-    }, [originCoords, destCoords, mode, onRouteFound, onClearRoute, t]);
+    }, [originCoords, destCoords, mode, onRouteFound, onClearRoute]);
 
     useEffect(() => {
         calculateRoute();
@@ -263,11 +264,18 @@ export default function DirectionsPanel({
 
             {route && !loading && (
                 <>
-                    <div className="route-summary" id="route-summary">
+                    <div className="route-summary" id="route-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div className="route-info">
                             <span className="route-duration" id="route-duration">{route.duration}</span>
                             <span className="route-distance" id="route-distance">{route.distance}</span>
                         </div>
+                        <button
+                            className="start-journey-btn"
+                            id="start-journey-btn"
+                            onClick={() => onStartJourney?.(route)}
+                        >
+                            {t.startTrip || 'Start'}
+                        </button>
                     </div>
 
                     <div className="directions-steps" id="directions-steps">

@@ -9,7 +9,7 @@ import PlaceCard from '@/components/PlaceCard';
 import Toast from '@/components/Toast';
 import { shouldBeDark, getTranslations, getDirection } from '@/lib/i18n';
 
-// Dynamically import MapView to avoid SSR issues with Leaflet
+// Dynamically import MapView to avoid SSR issues with MapLibre GL
 const MapView = dynamic(() => import('@/components/MapView'), {
   ssr: false,
   loading: () => (
@@ -25,6 +25,12 @@ const MapView = dynamic(() => import('@/components/MapView'), {
     </div>
   ),
 });
+
+function calculateETA(durationSeconds) {
+  const now = new Date();
+  const eta = new Date(now.getTime() + durationSeconds * 1000);
+  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 export default function Home() {
   const mapRef = useRef(null);
@@ -42,6 +48,10 @@ export default function Home() {
   const [toast, setToast] = useState({ message: '', visible: false });
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Navigation state
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [navRoute, setNavRoute] = useState(null);
+
   // Sync fullscreen state with DOM api if user presses Esc
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -51,7 +61,7 @@ export default function Home() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Initialize auto theme on mount (CSS filter on tiles handles dark map look)
+  // Initialize auto theme on mount
   useEffect(() => {
     const dark = shouldBeDark();
     setIsDark(dark);
@@ -104,18 +114,34 @@ export default function Home() {
     setSelectedPlace(null);
   }, []);
 
+  // Start Journey
+  const handleStartJourney = useCallback((route) => {
+    setIsNavigating(true);
+    setNavRoute(route);
+    setDirectionsOpen(false);
+    showToast('Navigation started! 🚗');
+  }, [showToast]);
+
+  // End Journey
+  const handleEndJourney = useCallback(() => {
+    setIsNavigating(false);
+    setNavRoute(null);
+    mapRef.current?.clearRoute();
+    showToast('Navigation ended');
+  }, [showToast]);
+
   // Location
   const handleLocate = useCallback(() => {
     mapRef.current?.locateUser();
     showToast(t.findingLocation);
   }, [showToast, t.findingLocation]);
 
-  // Layers (independent from dark mode — CSS filter handles dark appearance)
+  // Layers (independent from dark mode)
   const handleLayerChange = useCallback((layer) => {
     setCurrentLayer(layer);
   }, []);
 
-  // Theme (changes tiles to dark layer and sets css variables)
+  // Theme
   const handleThemeToggle = useCallback(() => {
     const newDark = !isDark;
     setIsDark(newDark);
@@ -147,6 +173,22 @@ export default function Home() {
 
   return (
     <>
+      {/* Navigation ETA Banner */}
+      {isNavigating && navRoute && (
+        <div className="nav-eta-banner" id="nav-eta-banner">
+          <div className="nav-eta-info">
+            <span className="nav-eta-time">{navRoute.duration}</span>
+            <div className="nav-eta-details">
+              <span className="nav-eta-distance">{navRoute.distance}</span>
+              <span className="nav-eta-arrival">ETA: {calculateETA(navRoute.rawDuration)}</span>
+            </div>
+          </div>
+          <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn">
+            End
+          </button>
+        </div>
+      )}
+
       <MapView
         ref={mapRef}
         onMapClick={handleMapClick}
@@ -155,7 +197,7 @@ export default function Home() {
         isDark={isDark}
       />
 
-      {!directionsOpen && (
+      {!directionsOpen && !isNavigating && (
         <SearchBar
           onPlaceSelect={handlePlaceSelect}
           onDirectionsOpen={handleDirectionsOpen}
@@ -169,27 +211,30 @@ export default function Home() {
         onClose={() => setDirectionsOpen(false)}
         onRouteFound={handleRouteFound}
         onClearRoute={handleClearRoute}
+        onStartJourney={handleStartJourney}
         initialDestination={directionsDestination}
         t={t}
         lang={lang}
       />
 
-      <MapControls
-        onLocate={handleLocate}
-        onLayerChange={handleLayerChange}
-        currentLayer={currentLayer}
-        onThemeToggle={handleThemeToggle}
-        isDark={isDark}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
-        lang={lang}
-        onLangToggle={handleLangToggle}
-        isFullscreen={isFullscreen}
-        onFullscreenToggle={handleFullscreenToggle}
-        t={t}
-      />
+      {!isNavigating && (
+        <MapControls
+          onLocate={handleLocate}
+          onLayerChange={handleLayerChange}
+          currentLayer={currentLayer}
+          onThemeToggle={handleThemeToggle}
+          isDark={isDark}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          lang={lang}
+          onLangToggle={handleLangToggle}
+          isFullscreen={isFullscreen}
+          onFullscreenToggle={handleFullscreenToggle}
+          t={t}
+        />
+      )}
 
-      {selectedPlace && !directionsOpen && (
+      {selectedPlace && !directionsOpen && !isNavigating && (
         <PlaceCard
           place={selectedPlace}
           onClose={() => {
