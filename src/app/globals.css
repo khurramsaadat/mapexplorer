@@ -237,10 +237,10 @@ body {
 
 .search-result-item {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
   padding: 12px 16px;
   cursor: pointer;
+  gap: 16px;
   transition: background var(--transition);
   border-bottom: 1px solid var(--border);
 }
@@ -254,14 +254,21 @@ body {
 }
 
 .result-icon {
-  width: 24px;
-  height: 24px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
+  min-width: 44px;
+  color: var(--text-secondary);
   flex-shrink: 0;
+}
+
+.result-distance-small {
+  font-size: 10px;
   margin-top: 2px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .result-info {
@@ -270,12 +277,31 @@ body {
 }
 
 .result-name {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.result-address {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.result-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  padding-left: 8px;
 }
 
 .result-address {
@@ -308,6 +334,92 @@ body {
 .directions-panel.open {
   transform: translateX(0);
 }
+
+/* Results & Options styling */
+.route-alternatives-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 0 20px 20px;
+}
+
+.route-options-title {
+    font-size: 14px;
+    margin: 0;
+    opacity: 0.8;
+    padding-bottom: 4px;
+}
+
+.route-option-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+.route-option-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.route-duration {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.route-option-card.active {
+    border: 2px solid #4285f4;
+    background: rgba(66, 133, 244, 0.05);
+    box-shadow: 0 2px 8px rgba(66,133,244,0.15);
+}
+
+.route-option-card.active .route-duration {
+    color: #1a73e8;
+}
+
+.route-details {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.fastest-tag {
+    color: #34a853;
+}
+
+.route-summary-action {
+    padding: 0 20px 20px;
+}
+
+.start-journey-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    border-radius: 24px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+}
+
+.start-journey-btn:hover {
+    background: #1557b0;
+}
+
 
 .directions-header {
   display: flex;
@@ -1486,4 +1598,145 @@ body {
 .nav-recenter-btn:hover {
     transform: scale(1.1);
     box-shadow: var(--shadow-xl);
+}
+
+/* ===== Place Action Pills (Google Maps Style) ===== */
+.place-actions-row {
+    display: flex;
+    padding: 12px 0;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-bottom: 8px;
+}
+
+.place-actions-row::-webkit-scrollbar {
+    display: none;
+}
+
+.place-action-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+    transition: all var(--transition);
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.place-action-pill.primary {
+    background: #00758f;
+    color: white;
+}
+
+.place-action-pill.secondary {
+    background: #e8f0fe;
+    color: #1a73e8;
+}
+
+.place-action-pill.tertiary {
+    background: white;
+    border: 1px solid #dadce0;
+    color: #3c4043;
+}
+
+[data-theme="dark"] .place-action-pill.tertiary {
+    background: #303134;
+    border: 1px solid #5f6368;
+    color: #e8eaed;
+}
+
+/* ===== Mobile Layout Fixes (70% Map) ===== */
+@media (max-width: 768px) {
+    .place-card {
+        width: 100% !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        top: auto !important;
+        max-height: 50vh !important;
+        border-radius: 20px 20px 0 0 !important;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important;
+        z-index: 2000 !important;
+    }
+
+    .zoom-controls {
+        display: none !important;
+    }
+
+    .directions-panel {
+        width: 100% !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        top: auto !important;
+        height: 30vh !important;
+        border-radius: 20px 20px 0 0 !important;
+        box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important;
+        z-index: 2000 !important;
+        overflow-y: auto !important;
+    }
+
+    .directions-panel-header {
+      padding: 6px 16px !important;
+    }
+
+    .directions-title {
+        font-size: 16px !important;
+    }
+
+    .directions-mode-selector {
+        padding: 5px 16px !important;
+        gap: 8px !important;
+    }
+
+    .mode-btn {
+        padding: 6px !important;
+    }
+
+    .directions-inputs {
+      padding: 5px 16px !important;
+      gap: 6px !important;
+    }
+
+    .directions-input {
+        padding: 8px 12px 8px 30px !important;
+        font-size: 14px !important;
+    }
+
+    .route-alternatives-list {
+      padding: 5px 16px 10px !important;
+      gap: 8px !important;
+    }
+
+    .route-options-title {
+        font-size: 11px !important;
+        padding-bottom: 2px !important;
+    }
+
+    .route-option-card {
+        padding: 8px 12px !important;
+        border-radius: 8px !important;
+    }
+
+    .route-duration {
+        font-size: 16px !important;
+    }
+
+    .route-details {
+        font-size: 12px !important;
+    }
+
+    .route-summary-action {
+        padding: 0 16px 15px !important;
+    }
+
+    .start-journey-btn {
+        padding: 10px !important;
+        font-size: 14px !important;
+        border-radius: 20px !important;
+    }
 }

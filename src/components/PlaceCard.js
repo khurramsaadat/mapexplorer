@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 
-export default function PlaceCard({ place, onClose, onDirections, t }) {
+export default function PlaceCard({ place, onClose, onDirections, onStart, t }) {
     const [activeTab, setActiveTab] = useState('overview');
     if (!place) return null;
 
@@ -51,57 +51,33 @@ export default function PlaceCard({ place, onClose, onDirections, t }) {
                 </div>
 
                 <div className="place-actions-row">
-                    <button className="action-circle-btn active" onClick={() => onDirections?.(place)} id="directions-to-btn" title="Directions">
-                        <div className="action-circle">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <polygon points="3 11 22 2 13 21 11 13 3 11" />
-                            </svg>
-                        </div>
+                    <button className="place-action-pill primary" onClick={() => onDirections?.(place)} id="directions-to-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polygon points="3 11 22 2 13 21 11 13 3 11" />
+                        </svg>
                         <span>Directions</span>
                     </button>
-                    <button className="action-circle-btn" title="Save">
-                        <div className="action-circle">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path>
-                            </svg>
-                        </div>
-                        <span>Save</span>
+                    <button className="place-action-pill secondary" onClick={() => onStart?.(place)} id="start-to-btn">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                            <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+                        </svg>
+                        <span>Start</span>
                     </button>
-                    <button className="action-circle-btn" title="Nearby">
-                        <div className="action-circle">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                        </div>
-                        <span>Nearby</span>
+                    <button className="place-action-pill tertiary" title="Directory">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                        </svg>
+                        <span>Directory</span>
                     </button>
-                    <button className="action-circle-btn" title="Send to phone">
-                        <div className="action-circle">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-                                <line x1="12" y1="18" x2="12.01" y2="18"></line>
-                            </svg>
-                        </div>
-                        <span>Send to phone</span>
-                    </button>
-                    <button 
-                        className="action-circle-btn" 
-                        onClick={() => {
-                            const url = `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lon}#map=17/${place.lat}/${place.lon}`;
-                            navigator.clipboard?.writeText(url);
-                        }}
-                        title="Share"
-                    >
-                        <div className="action-circle">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <circle cx="18" cy="5" r="3" />
-                                <circle cx="6" cy="12" r="3" />
-                                <circle cx="18" cy="19" r="3" />
-                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                            </svg>
-                        </div>
+                    <button className="place-action-pill tertiary" title="Share">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="18" cy="5" r="3" />
+                            <circle cx="6" cy="12" r="3" />
+                            <circle cx="18" cy="19" r="3" />
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                        </svg>
                         <span>Share</span>
                     </button>
                 </div>

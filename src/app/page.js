@@ -58,36 +58,31 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState(null);
   const [remainingDuration, setRemainingDuration] = useState(null);
   const [remainingDistance, setRemainingDistance] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
   const watchIdRef = useRef(null);
+  const userLocWatchIdRef = useRef(null);
   const navStartTimeRef = useRef(null);
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  // Initialize auto theme
-  useEffect(() => {
-    const s = loadSettings();
-    setSettings(s);
-    const dark = s.autoDarkMode ? shouldBeDark() : false;
-    setIsDark(dark);
-    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('dir', getDirection(lang));
-  }, [lang]);
+  // --- Callbacks (Hoisting-safe order) ---
 
   const showToast = useCallback((message) => {
     setToast({ message, visible: true });
     setTimeout(() => setToast({ message: '', visible: false }), 3000);
   }, []);
 
-  // Search → fly to place
+  const handleLocate = useCallback(() => {
+    mapRef.current?.locateUser();
+    showToast(t.findingLocation);
+  }, [showToast, t.findingLocation]);
+
+  const handleRecenter = useCallback(() => {
+    if (userLocation) {
+      mapRef.current?.flyTo(userLocation.lat, userLocation.lon, 18);
+    } else {
+      mapRef.current?.locateUser();
+    }
+  }, [userLocation]);
+
   const handlePlaceSelect = useCallback((place) => {
     mapRef.current?.clearMarkers();
     mapRef.current?.flyTo(place.lat, place.lon, 16);
@@ -95,7 +90,6 @@ export default function Home() {
     setSelectedPlace(place);
   }, []);
 
-  // Map click → reverse geocode
   const handleMapClick = useCallback((place) => {
     if (!place) return;
     mapRef.current?.clearMarkers();
@@ -103,7 +97,6 @@ export default function Home() {
     setSelectedPlace(place);
   }, []);
 
-  // Directions
   const handleDirectionsOpen = useCallback(() => {
     setDirectionsOpen(true);
     setSelectedPlace(null);
@@ -124,12 +117,10 @@ export default function Home() {
     setSelectedPlace(null);
   }, []);
 
-  // Route selection from map (tapping on route line or label)
   const handleRouteSelect = useCallback((index) => {
     setMapRouteSelectIndex(index);
   }, []);
 
-  // Start Journey
   const handleStartJourney = useCallback((route) => {
     setIsNavigating(true);
     setNavRoute(route);
@@ -139,34 +130,20 @@ export default function Home() {
     setCurrentStep(route.steps?.[0] || null);
     navStartTimeRef.current = Date.now();
 
-    // Start navigation mode on map (zoom, arrow)
     mapRef.current?.startNavigation(route);
+    mapRef.current?.flyTo(route.steps[0].maneuver.location[1], route.steps[0].maneuver.location[0], 18);
 
-    // Start position tracking
     if (navigator.geolocation) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          const { latitude, longitude } = pos.coords;
-          const speed = pos.coords.speed;
-          const heading = pos.coords.heading;
-
-          if (speed !== null) {
-            setLiveSpeed(Math.round(speed * 3.6));
-          }
-
-          // Update arrow position on map
+          const { latitude, longitude, speed, heading } = pos.coords;
+          if (speed !== null) setLiveSpeed(Math.round(speed * 3.6));
           mapRef.current?.updateNavPosition(latitude, longitude, heading);
-
-          // Update remaining time estimate
           if (navStartTimeRef.current && route.rawDuration) {
             const elapsed = (Date.now() - navStartTimeRef.current) / 1000;
             const remaining = Math.max(0, route.rawDuration - elapsed);
             const mins = Math.round(remaining / 60);
-            if (mins > 60) {
-              setRemainingDuration(`${Math.floor(mins / 60)} hr ${mins % 60} min`);
-            } else {
-              setRemainingDuration(`${mins} min`);
-            }
+            setRemainingDuration(mins > 60 ? `${Math.floor(mins / 60)} hr ${mins % 60} min` : `${mins} min`);
           }
         },
         null,
@@ -176,7 +153,22 @@ export default function Home() {
     showToast(t.navStarted);
   }, [showToast, t.navStarted]);
 
-  // End Journey
+  const handleQuickStart = useCallback(async (place) => {
+    if (!userLocation) {
+        showToast("Waiting for GPS...");
+        return;
+    }
+    showToast("Calculating fast route...");
+    const { getDirections } = await import('@/lib/api');
+    const routes = await getDirections(userLocation.lat, userLocation.lon, place.lat, place.lon);
+    if (routes && routes.length > 0) {
+        handleStartJourney(routes[0]);
+        setSelectedPlace(null);
+    } else {
+        showToast("Could not find a route.");
+    }
+  }, [userLocation, handleStartJourney, showToast]);
+
   const handleEndJourney = useCallback(() => {
     setIsNavigating(false);
     setNavRoute(null);
@@ -194,41 +186,21 @@ export default function Home() {
     showToast(t.navEnded);
   }, [showToast, t.navEnded]);
 
-  // Recenter
-  const handleRecenter = useCallback(() => {
-    mapRef.current?.recenter();
-  }, []);
+  const handleLayerChange = useCallback((layer) => setCurrentLayer(layer), []);
+  const handleLangToggle = useCallback(() => setLang((prev) => (prev === 'en' ? 'ar' : 'en')), []);
+  const handleZoomIn = useCallback(() => mapRef.current?.zoomIn(), []);
+  const handleZoomOut = useCallback(() => mapRef.current?.zoomOut(), []);
 
-  // Location
-  const handleLocate = useCallback(() => {
-    mapRef.current?.locateUser();
-    showToast(t.findingLocation);
-  }, [showToast, t.findingLocation]);
-
-  // Layers
-  const handleLayerChange = useCallback((layer) => {
-    setCurrentLayer(layer);
-  }, []);
-
-  // Language
-  const handleLangToggle = useCallback(() => {
-    setLang((prev) => (prev === 'en' ? 'ar' : 'en'));
-  }, []);
-
-  // Fullscreen
   const handleFullscreenToggle = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch((err) => {
         showToast(`Error attempting to enable fullscreen: ${err.message}`);
       });
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
+    } else if (document.exitFullscreen) {
+      document.exitFullscreen();
     }
   }, [showToast]);
 
-  // Settings
   const handleSettingsChange = useCallback((newSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
@@ -239,9 +211,43 @@ export default function Home() {
     }
   }, []);
 
-  // Zoom
-  const handleZoomIn = useCallback(() => mapRef.current?.zoomIn(), []);
-  const handleZoomOut = useCallback(() => mapRef.current?.zoomOut(), []);
+  // --- Effects ---
+
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    const s = loadSettings();
+    setSettings(s);
+    const dark = s.autoDarkMode ? shouldBeDark() : false;
+    setIsDark(dark);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    
+    // Quick startup location
+    if (navigator.geolocation) {
+      setTimeout(() => handleLocate(), 1000);
+    }
+  }, [handleLocate]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('dir', getDirection(lang));
+  }, [lang]);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      userLocWatchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+        null,
+        { enableHighAccuracy: true }
+      );
+    }
+    return () => {
+      if (userLocWatchIdRef.current) navigator.geolocation.clearWatch(userLocWatchIdRef.current);
+    };
+  }, []);
 
   return (
     <>
@@ -331,6 +337,7 @@ export default function Home() {
           onDirectionsOpen={handleDirectionsOpen}
           t={t}
           lang={lang}
+          userLocation={userLocation}
         />
       )}
 
@@ -378,6 +385,7 @@ export default function Home() {
             mapRef.current?.clearMarkers();
           }}
           onDirections={handleDirectionsToPlace}
+          onStart={handleQuickStart}
           t={t}
         />
       )}

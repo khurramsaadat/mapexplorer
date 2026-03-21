@@ -41,17 +41,26 @@ export async function searchPlaces(query, lang = 'en', userLat = null, userLon =
     if (!res.ok) throw new Error('Search failed');
     const data = await res.json();
 
-    const results = data.map((item) => ({
-      id: item.place_id,
-      name: item.display_name.split(',')[0],
-      fullAddress: item.display_name,
-      lat: parseFloat(item.lat),
-      lon: parseFloat(item.lon),
-      type: item.type,
-      category: item.category,
-      boundingbox: item.boundingbox,
-      extratags: item.extratags || {},
-    }));
+    const results = data.map((item) => {
+      let distanceStr = '';
+      if (userLat !== null && userLon !== null) {
+          const d = calculateDistance(userLat, userLon, parseFloat(item.lat), parseFloat(item.lon));
+          distanceStr = d > 1 ? `${d.toFixed(1)} km` : `${Math.round(d * 1000)} m`;
+      }
+
+      return {
+        id: item.place_id,
+        name: item.display_name.split(',')[0],
+        fullAddress: item.display_name,
+        lat: parseFloat(item.lat),
+        lon: parseFloat(item.lon),
+        type: item.type,
+        category: item.category,
+        boundingbox: item.boundingbox,
+        extratags: item.extratags || {},
+        distance: distanceStr
+      };
+    });
     
     // Fetch wiki details in background (non-blocking) so search results appear instantly
     Promise.all(results.map(async (place) => {
@@ -235,6 +244,21 @@ export async function getDirections(startLat, startLon, endLat, endLon, mode = '
         console.error('Error fetching directions:', error);
         return null;
     }
+}
+
+/**
+ * Calculate Haversine distance between two points in km
+ */
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
 }
 
 function formatInstruction(step) {

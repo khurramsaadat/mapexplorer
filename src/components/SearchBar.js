@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { searchPlaces } from '@/lib/api';
 
-export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) {
+export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang, userLocation }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [history, setHistory] = useState([]);
@@ -25,10 +25,10 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
             return;
         }
 
-        const places = await searchPlaces(value, lang);
+        const places = await searchPlaces(value, lang, userLocation?.lat, userLocation?.lon);
         setResults(places);
         setIsOpen(places.length > 0);
-    }, [lang]);
+    }, [lang, userLocation]);
 
     const handleInputChange = (e) => {
         const value = e.target.value;
@@ -125,14 +125,21 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
                             onClick={() => handleSelect(place)}
                         >
                             <div className="result-icon">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                                     <circle cx="12" cy="10" r="3" />
                                 </svg>
+                                {place.distance && <span className="result-distance-small">{place.distance}</span>}
                             </div>
                             <div className="result-info">
                                 <div className="result-name">{place.name}</div>
                                 <div className="result-address">{place.fullAddress}</div>
+                            </div>
+                            <div className="result-arrow">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.5">
+                                    <line x1="7" y1="17" x2="17" y2="7" />
+                                    <polyline points="7 7 17 7 17 17" />
+                                </svg>
                             </div>
                         </div>
                     ))}
@@ -144,15 +151,22 @@ export default function SearchBar({ onPlaceSelect, onDirectionsOpen, t, lang }) 
                             className="search-result-item"
                             onClick={() => handleSelect(place)}
                         >
-                            <div className="result-icon" style={{opacity: 0.6}}>
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <div className="result-icon" style={{opacity: 0.8}}>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <circle cx="12" cy="12" r="10" />
                                     <polyline points="12 6 12 12 16 14" />
                                 </svg>
+                                {place.distance && <span className="result-distance-small">{place.distance}</span>}
                             </div>
                             <div className="result-info">
                                 <div className="result-name">{place.name}</div>
                                 <div className="result-address" style={{opacity: 0.6}}>{place.fullAddress}</div>
+                            </div>
+                            <div className="result-arrow">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3">
+                                    <line x1="7" y1="17" x2="17" y2="7" />
+                                    <polyline points="7 7 17 7 17 17" />
+                                </svg>
                             </div>
                         </div>
                     ))}
