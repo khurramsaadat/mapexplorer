@@ -10,6 +10,7 @@ export default function DirectionsPanel({
     onClearRoute,
     onStartJourney,
     initialDestination,
+    selectedRouteIndex,
     t,
     lang,
 }) {
@@ -108,6 +109,14 @@ export default function DirectionsPanel({
     useEffect(() => {
         calculateRoute();
     }, [calculateRoute]);
+
+    // Sync route selection from map
+    useEffect(() => {
+        if (selectedRouteIndex !== undefined && selectedRouteIndex !== null && routes && selectedRouteIndex !== activeRouteIndex) {
+            setActiveRouteIndex(selectedRouteIndex);
+            onRouteFound?.(routes, selectedRouteIndex, originCoords, destCoords, mode);
+        }
+    }, [selectedRouteIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleSwap = () => {
         setOrigin(destination);

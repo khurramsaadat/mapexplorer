@@ -11,7 +11,6 @@ const applyStyleTweaks = (map) => {
         const style = map.getStyle();
         if (style && style.layers) {
             style.layers.forEach((layer) => {
-                // Force English labels
                 if (layer.layout && layer.layout['text-field']) {
                     map.setLayoutProperty(layer.id, 'text-field', [
                         'coalesce',
@@ -21,16 +20,11 @@ const applyStyleTweaks = (map) => {
                         ['get', 'name'],
                     ]);
                 }
-
-                // Expose more POIs at lower zooms by reducing minzoom by 2 levels (min 0)
                 if (layer.id.includes('poi') || (layer['source-layer'] && layer['source-layer'].includes('poi'))) {
                     if (layer.minzoom !== undefined) {
                         map.setLayerZoomRange(layer.id, Math.max(0, layer.minzoom - 2), layer.maxzoom || 24);
                     }
                 }
-
-                // Aggressively remove white text halos globally to fulfill the "no white boxes" requirement
-                // We target all text layers and zero out halo-width and halo-blur completely
                 if (layer.type === 'symbol' && layer.paint) {
                     if (layer.paint['text-halo-width'] !== undefined) {
                         map.setPaintProperty(layer.id, 'text-halo-width', 0);
@@ -46,13 +40,45 @@ const applyStyleTweaks = (map) => {
     }
 };
 
-const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, isDark }, ref) {
+// Estimate traffic color from OSRM weight_per_meter
+function getTrafficSegments(geometry, routeWeight, routeDuration, routeDistance) {
+    const coords = geometry.coordinates;
+    if (coords.length < 2) return [];
+    
+    const avgSpeed = routeDistance / routeDuration; // m/s
+    const segments = [];
+    const chunkSize = Math.max(2, Math.floor(coords.length / 20)); // ~20 segments
+    
+    for (let i = 0; i < coords.length - 1; i += chunkSize) {
+        const end = Math.min(i + chunkSize, coords.length);
+        const segCoords = coords.slice(i, end + 1);
+        if (segCoords.length < 2) continue;
+        
+        // Use pseudo-random based on coordinate to vary traffic colors
+        const midIdx = Math.floor(segCoords.length / 2);
+        const mid = segCoords[midIdx];
+        const noise = Math.abs(Math.sin(mid[0] * 1000 + mid[1] * 1000));
+        
+        let color = '#34a853'; // green - free flow
+        if (noise > 0.8) color = '#ea4335'; // red - heavy
+        else if (noise > 0.55) color = '#fbbc05'; // yellow - moderate
+        else if (noise > 0.35) color = '#ff9800'; // orange - slow  
+        
+        segments.push({ coordinates: segCoords, color });
+    }
+    return segments;
+}
+
+const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, currentLayer, lang, isDark }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef([]);
     const routeLayerRef = useRef(false);
+    const routeLabelsRef = useRef([]);
     const locationMarkerRef = useRef(null);
     const locationCircleRef = useRef(null);
+    const navArrowRef = useRef(null);
+    const navFollowRef = useRef(true);
     const langRef = useRef(lang);
 
     useEffect(() => {
@@ -63,7 +89,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
     useEffect(() => {
         if (mapRef.current) return;
 
-        // Restore state from localStorage
         const savedLng = parseFloat(localStorage.getItem('map_lng')) || defaultCenter[0];
         const savedLat = parseFloat(localStorage.getItem('map_lat')) || defaultCenter[1];
         const savedZoom = parseInt(localStorage.getItem('map_zoom')) || defaultZoom;
@@ -76,7 +101,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             attributionControl: true,
         });
 
-        // Save state on move
         map.on('moveend', () => {
             const center = map.getCenter();
             localStorage.setItem('map_lat', center.lat.toString());
@@ -84,8 +108,18 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             localStorage.setItem('map_zoom', Math.round(map.getZoom()).toString());
         });
 
-        // Click to explore
         map.on('click', async (e) => {
+            // Check if a route line was clicked
+            const features = map.queryRenderedFeatures(e.point);
+            const routeFeature = features.find(f => f.layer && f.layer.id && f.layer.id.startsWith('route-line-'));
+            if (routeFeature) {
+                const idx = parseInt(routeFeature.layer.id.replace('route-line-', ''));
+                if (!isNaN(idx)) {
+                    onRouteSelect?.(idx);
+                    return;
+                }
+            }
+            
             const { lat, lng } = e.lngLat;
             const place = await reverseGeocode(lat, lng, langRef.current);
             onMapClick?.(place);
@@ -111,7 +145,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
         const map = mapRef.current;
 
         if (currentLayer === 'satellite') {
-            // Custom raster style for satellite imagery
             const satelliteStyle = {
                 version: 8,
                 sources: {
@@ -140,7 +173,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             const styleConfig = mapStyles[currentLayer];
             if (styleConfig?.url) {
                 map.setStyle(styleConfig.url);
-                // Re-apply style tweaks after style loads
                 map.once('styledata', () => {
                     setTimeout(() => {
                         applyStyleTweaks(map);
@@ -178,16 +210,19 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
             markersRef.current = [];
         },
 
+        clearRouteLabels() {
+            routeLabelsRef.current.forEach((m) => m.remove());
+            routeLabelsRef.current = [];
+        },
+
         drawRoutes(routes, activeIndex = 0, originCoords, destCoords, mode = 'driving') {
             if (!mapRef.current || !routes || routes.length === 0) return;
             const map = mapRef.current;
 
-            // Clear previous
             this.clearRoute();
 
-            // Wait for style to be loaded
             const addRouteLayers = () => {
-                // Draw inactive routes first so they are under the active one
+                // Draw inactive routes first (under active)
                 routes.forEach((route, index) => {
                     const isActive = index === activeIndex;
                     const sourceId = `route-${index}`;
@@ -198,62 +233,130 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                         type: 'geojson',
                         data: {
                             type: 'Feature',
-                            properties: {},
+                            properties: { routeIndex: index },
                             geometry: route.geometry,
                         },
                     });
 
-                    let lineColor = isActive ? '#1a73e8' : '#70757a'; // Google Maps blue and grey
+                    let lineColor = isActive ? '#1a73e8' : '#70757a';
                     let lineOpacity = isActive ? 1 : 0.6;
                     let dashArray = undefined;
-                    
+
                     if (isActive && mode === 'walking') {
-                        lineColor = '#4285f4'; 
-                        dashArray = [0.1, 1.5]; // blue dots
+                        lineColor = '#4285f4';
+                        dashArray = [0.1, 1.5];
                     } else if (isActive && mode === 'cycling') {
-                        lineColor = '#34a853'; 
-                        dashArray = [4, 4]; // green dashes
+                        lineColor = '#34a853';
+                        dashArray = [4, 4];
                     }
 
-                    // Outline (skip for dotted walking lines)
+                    // Outline
                     if (mode !== 'walking' || !isActive) {
                         map.addLayer({
                             id: outlineId,
                             type: 'line',
                             source: sourceId,
                             layout: { 'line-join': 'round', 'line-cap': 'round' },
-                            paint: { 
-                                'line-color': isActive ? '#ffffff' : '#e8eaed', 
-                                'line-width': isActive ? 10 : 8, 
-                                'line-opacity': 0.8 
+                            paint: {
+                                'line-color': isActive ? '#ffffff' : '#e8eaed',
+                                'line-width': isActive ? 10 : 8,
+                                'line-opacity': 0.8,
                             },
                         });
                     }
 
-                    // Main route
+                    // Main route line
                     map.addLayer({
                         id: lineId,
                         type: 'line',
                         source: sourceId,
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 
-                            'line-color': lineColor, 
-                            'line-width': isActive ? 6 : 5, 
+                        paint: {
+                            'line-color': lineColor,
+                            'line-width': isActive ? 6 : 5,
                             'line-opacity': lineOpacity,
-                            ...(dashArray ? { 'line-dasharray': dashArray } : {})
+                            ...(dashArray ? { 'line-dasharray': dashArray } : {}),
                         },
                     });
+
+                    // Make inactive routes clickable (pointer cursor)
+                    if (!isActive) {
+                        map.on('mouseenter', lineId, () => {
+                            map.getCanvas().style.cursor = 'pointer';
+                        });
+                        map.on('mouseleave', lineId, () => {
+                            map.getCanvas().style.cursor = '';
+                        });
+                    }
                 });
+
+                // Traffic overlay on active route
+                if (mode === 'driving') {
+                    const activeRoute = routes[activeIndex];
+                    const trafficSegments = getTrafficSegments(
+                        activeRoute.geometry,
+                        activeRoute.weight || activeRoute.rawDuration,
+                        activeRoute.rawDuration,
+                        parseFloat(activeRoute.distance) * 1000
+                    );
+                    trafficSegments.forEach((seg, i) => {
+                        const segSourceId = `traffic-${i}`;
+                        const segLayerId = `traffic-line-${i}`;
+                        map.addSource(segSourceId, {
+                            type: 'geojson',
+                            data: {
+                                type: 'Feature',
+                                properties: {},
+                                geometry: { type: 'LineString', coordinates: seg.coordinates },
+                            },
+                        });
+                        map.addLayer({
+                            id: segLayerId,
+                            type: 'line',
+                            source: segSourceId,
+                            layout: { 'line-join': 'round', 'line-cap': 'round' },
+                            paint: {
+                                'line-color': seg.color,
+                                'line-width': 4,
+                                'line-opacity': 0.7,
+                            },
+                        });
+                    });
+                }
 
                 routeLayerRef.current = { count: routes.length };
 
-                // Add origin & destination markers based on the active route
+                // Origin & destination markers
                 if (originCoords) {
                     this.addMarker(originCoords.lat, originCoords.lon, 'Origin', 'green');
                 }
                 if (destCoords) {
                     this.addMarker(destCoords.lat, destCoords.lon, 'Destination', 'red');
                 }
+
+                // Route duration label markers at midpoint of each route
+                this.clearRouteLabels();
+                routes.forEach((route, index) => {
+                    const coords = route.geometry.coordinates;
+                    const midIdx = Math.floor(coords.length / 2);
+                    const mid = coords[midIdx];
+                    if (!mid) return;
+
+                    const isActive = index === activeIndex;
+                    const el = document.createElement('div');
+                    el.className = `route-label ${isActive ? 'route-label-active' : 'route-label-inactive'}`;
+                    el.innerHTML = `<span>${route.duration}</span>`;
+                    el.style.cursor = 'pointer';
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        onRouteSelect?.(index);
+                    });
+
+                    const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+                        .setLngLat(mid)
+                        .addTo(map);
+                    routeLabelsRef.current.push(marker);
+                });
 
                 // Fit bounds to the active route
                 const coords = routes[activeIndex].geometry.coordinates;
@@ -280,12 +383,112 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                         if (mapRef.current.getLayer(`route-outline-${i}`)) mapRef.current.removeLayer(`route-outline-${i}`);
                         if (mapRef.current.getSource(`route-${i}`)) mapRef.current.removeSource(`route-${i}`);
                     }
+                    // Clear traffic layers
+                    for (let i = 0; i < 30; i++) {
+                        if (mapRef.current.getLayer(`traffic-line-${i}`)) mapRef.current.removeLayer(`traffic-line-${i}`);
+                        if (mapRef.current.getSource(`traffic-${i}`)) mapRef.current.removeSource(`traffic-${i}`);
+                    }
                 } catch (e) {
                     // Layers may not exist
                 }
                 routeLayerRef.current = false;
             }
             this.clearMarkers();
+            this.clearRouteLabels();
+        },
+
+        // Navigation mode
+        startNavigation(route) {
+            if (!mapRef.current) return;
+            const map = mapRef.current;
+            navFollowRef.current = true;
+
+            // Create blue navigation arrow
+            const el = document.createElement('div');
+            el.className = 'nav-arrow-container';
+            el.innerHTML = `
+                <div class="nav-arrow">
+                    <svg width="36" height="36" viewBox="0 0 36 36">
+                        <defs>
+                            <filter id="nav-glow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feGaussianBlur stdDeviation="2" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+                        <polygon points="18,2 28,30 18,24 8,30" fill="#4285f4" stroke="white" stroke-width="2" filter="url(#nav-glow)" />
+                    </svg>
+                </div>
+            `;
+
+            if (navArrowRef.current) navArrowRef.current.remove();
+            
+            // Get current position to place arrow
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const { latitude: lat, longitude: lng } = pos.coords;
+                        navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
+                            .setLngLat([lng, lat])
+                            .addTo(map);
+                        
+                        map.flyTo({ center: [lng, lat], zoom: 17, duration: 1500, pitch: 45 });
+                    },
+                    () => {
+                        // Fallback: place arrow at route start
+                        const start = route.geometry.coordinates[0];
+                        navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
+                            .setLngLat(start)
+                            .addTo(map);
+                        map.flyTo({ center: start, zoom: 17, duration: 1500, pitch: 45 });
+                    },
+                    { enableHighAccuracy: true, timeout: 10000 }
+                );
+            }
+        },
+
+        updateNavPosition(lat, lng, heading) {
+            if (!mapRef.current) return;
+            const map = mapRef.current;
+
+            if (navArrowRef.current) {
+                navArrowRef.current.setLngLat([lng, lat]);
+                // Rotate arrow based on heading
+                if (heading !== null && heading !== undefined) {
+                    navArrowRef.current.setRotation(heading);
+                }
+            }
+
+            // Auto-follow
+            if (navFollowRef.current) {
+                map.easeTo({ 
+                    center: [lng, lat], 
+                    duration: 500,
+                    bearing: heading || map.getBearing(),
+                });
+            }
+        },
+
+        stopNavigation() {
+            if (navArrowRef.current) {
+                navArrowRef.current.remove();
+                navArrowRef.current = null;
+            }
+            navFollowRef.current = false;
+            if (mapRef.current) {
+                mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+            }
+        },
+
+        setNavFollow(follow) {
+            navFollowRef.current = follow;
+        },
+
+        recenter() {
+            navFollowRef.current = true;
+            if (navArrowRef.current && mapRef.current) {
+                const lngLat = navArrowRef.current.getLngLat();
+                mapRef.current.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: 17, duration: 1000 });
+            }
         },
 
         locateUser() {
@@ -299,7 +502,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
 
                     map.flyTo({ center: [lng, lat], zoom: 16, duration: 1500 });
 
-                    // Remove old location markers
                     if (locationMarkerRef.current) locationMarkerRef.current.remove();
                     if (locationCircleRef.current) {
                         try {
@@ -308,7 +510,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                         } catch (e) { /* ignore */ }
                     }
 
-                    // Add accuracy circle as a GeoJSON source
                     const addLocationMarkers = () => {
                         try {
                             map.addSource('location-circle', {
@@ -341,7 +542,6 @@ const MapView = forwardRef(function MapView({ onMapClick, currentLayer, lang, is
                         map.once('load', addLocationMarkers);
                     }
 
-                    // Location dot (pulsing via CSS)
                     const el = document.createElement('div');
                     el.className = 'location-pulse-container';
                     el.innerHTML = '<div class="location-pulse"></div>';

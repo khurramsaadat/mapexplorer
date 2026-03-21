@@ -12,7 +12,7 @@ let searchAbortController = null;
 /**
  * Search for places using Nominatim
  */
-export async function searchPlaces(query, lang = 'en') {
+export async function searchPlaces(query, lang = 'en', userLat = null, userLon = null) {
   if (!query || query.trim().length < 2) return [];
 
   // Cancel previous request
@@ -24,9 +24,13 @@ export async function searchPlaces(query, lang = 'en') {
       q: query,
       format: 'json',
       addressdetails: '1',
-      extratags: '1',  // Add extratags to get Wikipedia info
-      limit: '6',
+      extratags: '1',
+      limit: '8',
       'accept-language': lang,
+      // Bias results toward Dubai/UAE region so local POI appear first
+      viewbox: '54.2,25.7,56.0,24.5',
+      bounded: '0', // 0 = prefer viewbox but allow global results too
+      countrycodes: 'ae',
     });
 
     const res = await fetch(`${NOMINATIM_BASE}/search?${params}`, {
@@ -37,7 +41,6 @@ export async function searchPlaces(query, lang = 'en') {
     if (!res.ok) throw new Error('Search failed');
     const data = await res.json();
 
-    // Enhance results with wikipedia data asynchronously without blocking the main search
     const results = data.map((item) => ({
       id: item.place_id,
       name: item.display_name.split(',')[0],
@@ -50,15 +53,13 @@ export async function searchPlaces(query, lang = 'en') {
       extratags: item.extratags || {},
     }));
     
-    // We can fetch wiki details here for the first few items, but to save time 
-    // we'll just parse the wiki tag and let the UI fetch if needed, 
-    // OR fetch the top result's details immediately for a snappy experience.
-    for (const place of results) {
+    // Fetch wiki details in background (non-blocking) so search results appear instantly
+    Promise.all(results.map(async (place) => {
         const wikiTag = place.extratags[`wikipedia:${lang}`] || place.extratags.wikipedia;
         if (wikiTag) {
             place.wikiData = await getWikipediaDetails(wikiTag);
         }
-    }
+    })).catch(() => {}); // fire-and-forget
     
     return results;
   } catch (err) {
