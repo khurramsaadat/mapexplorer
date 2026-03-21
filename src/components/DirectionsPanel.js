@@ -275,82 +275,74 @@ export default function DirectionsPanel({
 
             {routes && routes.length > 0 && !loading && (
                 <>
-                    <div className="route-alternatives" style={{ display: 'flex', gap: '8px', padding: '0 20px 10px', overflowX: 'auto' }}>
+                    <div className="route-alternatives-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '0 20px 20px' }}>
+                        <h3 style={{ fontSize: '14px', margin: 0, opacity: 0.8, paddingBottom: '4px' }}>Route Options</h3>
                         {routes.map((r, i) => (
                             <button
                                 key={i}
+                                className={`route-option-card ${i === activeRouteIndex ? 'active' : ''}`}
                                 onClick={() => {
                                     setActiveRouteIndex(i);
                                     onRouteFound?.(routes, i, originCoords, destCoords, mode);
                                 }}
-                                    style={{
-                                        padding: '8px 12px',
-                                        borderRadius: '8px',
-                                        border: i === activeRouteIndex ? '2px solid #4285f4' : '1px solid var(--border)',
-                                        background: i === activeRouteIndex ? 'rgba(66, 133, 244, 0.1)' : 'transparent',
-                                        cursor: 'pointer',
-                                        minWidth: '100px',
-                                        flexShrink: 0,
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        color: 'var(--text-primary)'
-                                    }}
-                                >
-                                    <span style={{ fontWeight: 'bold', color: i === activeRouteIndex ? '#4285f4' : 'inherit' }}>{r.duration}</span>
-                                    <span style={{ fontSize: '12px', opacity: i === activeRouteIndex ? 1 : 0.7 }}>{r.distance}</span>
-                                </button>
-                            ))}
+                                style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '16px',
+                                    borderRadius: '12px',
+                                    border: i === activeRouteIndex ? '2px solid #4285f4' : '1px solid var(--border)',
+                                    background: i === activeRouteIndex ? 'rgba(66, 133, 244, 0.05)' : 'var(--bg-secondary)',
+                                    cursor: 'pointer',
+                                    width: '100%',
+                                    textAlign: 'left',
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: i === activeRouteIndex ? '0 2px 8px rgba(66,133,244,0.15)' : 'none'
+                                }}
+                            >
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: i === activeRouteIndex ? '#1a73e8' : 'var(--text-primary)' }}>
+                                        {r.duration}
+                                    </span>
+                                    <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+                                        <span style={{color: '#34a853'}}>Fastest route</span> • {r.distance}
+                                    </span>
+                                </div>
+                                {i === activeRouteIndex && (
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                )}
+                            </button>
+                        ))}
                     </div>
 
-                    <div className="route-summary" id="route-summary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div className="route-info">
-                            <span className="route-duration" id="route-duration">{routes[activeRouteIndex].duration}</span>
-                            <span className="route-distance" id="route-distance">{routes[activeRouteIndex].distance}</span>
-                        </div>
+                    <div className="route-summary-action" style={{ padding: '0 20px 20px' }}>
                         <button
                             className="start-journey-btn"
                             id="start-journey-btn"
                             onClick={() => onStartJourney?.(routes[activeRouteIndex])}
+                            style={{
+                                width: '100%',
+                                padding: '14px',
+                                fontSize: '16px',
+                                borderRadius: '24px',
+                                background: '#1a73e8',
+                                color: 'white',
+                                border: 'none',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}
                         >
-                            {t.startTrip || 'Start'}
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                            </svg>
+                            {t.startTrip || 'Start your trip'}
                         </button>
-                    </div>
-
-                    <div className="directions-steps" id="directions-steps">
-                        {routes[activeRouteIndex].steps.map((step, i) => (
-                            <div key={i} className="direction-step">
-                                <div className="step-icon">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        {step.instruction.includes('left') ? (
-                                            <path d="M15 18l-6-6 6-6" />
-                                        ) : step.instruction.includes('right') ? (
-                                            <path d="M9 18l6-6-6-6" />
-                                        ) : step.instruction.includes('arrived') ? (
-                                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                        ) : (
-                                            <path d="M12 5v14M5 12l7-7 7 7" />
-                                        )}
-                                    </svg>
-                                </div>
-                                <div className="step-info">
-                                    <div className="step-instruction">{step.instruction}</div>
-                                    {step.lanes && (
-                                        <div className="lane-indicators">
-                                            {step.lanes.map((isValid, laneIdx) => (
-                                                <div 
-                                                    key={laneIdx} 
-                                                    className={`lane-icon ${isValid ? 'valid' : 'invalid'}`}
-                                                >
-                                                    ↑
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <div className="step-distance">{step.distance}</div>
-                                </div>
-                            </div>
-                        ))}
                     </div>
                 </>
             )}

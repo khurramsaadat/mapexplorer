@@ -166,10 +166,10 @@ export async function getDirections(startLat, startLon, endLat, endLon, mode = '
     // ORS requires coordinates in [lon, lat] format
     const startCoords = `${startLon},${startLat}`;
     const endCoords = `${endLon},${endLat}`;
-    // Using OSRM for directions
-    // OSRM default public API supports car, foot, bike depending on the endpoint
-    const osrmProfile = mode === 'walking' ? 'foot' : mode === 'cycling' ? 'bike' : 'car';
-    const osrmUrl = `https://router.project-osrm.org/route/v1/${osrmProfile}/${startCoords};${endCoords}?overview=full&geometries=geojson&steps=true&alternatives=${numAlternatives}`;
+    // Using routing.openstreetmap.de which has separate endpoints for car, foot, bike
+    // and is generally more reliable for multiple route alternatives
+    const host = mode === 'walking' ? 'routed-foot' : mode === 'cycling' ? 'routed-bike' : 'routed-car';
+    const osrmUrl = `https://routing.openstreetmap.de/${host}/route/v1/driving/${startCoords};${endCoords}?overview=full&geometries=geojson&steps=true&alternatives=${numAlternatives}`;
 
     try {
         const response = await fetch(osrmUrl);
