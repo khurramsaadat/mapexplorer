@@ -223,8 +223,14 @@ export async function getDirections(startLat, startLon, endLat, endLon, mode = '
                                 ? `${step.maneuver.type} ${step.maneuver.modifier}` 
                                 : step.maneuver.type,
                             distance: stepDist,
+                            rawDistance: step.distance || 0,
                             name: step.name || '',
                             lanes: lanes,
+                            maneuver: {
+                                type: step.maneuver.type || 'continue',
+                                modifier: step.maneuver.modifier || null,
+                                location: step.maneuver.location,
+                            },
                         });
                     });
                 }

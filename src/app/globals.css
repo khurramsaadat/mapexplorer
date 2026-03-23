@@ -101,38 +101,10 @@ body {
   padding: 2px 8px !important;
 }
 
-/* ===== Navigation ETA Banner - see bottom of file for styles ===== */
+/* ===== Slide-down animation (shared) ===== */
 @keyframes slideDown {
   from { transform: translateY(-100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
-}
-
-.nav-eta-info {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.nav-eta-time {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-.nav-eta-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.nav-eta-distance {
-  font-size: 14px;
-  opacity: 0.9;
-}
-
-.nav-eta-arrival {
-  font-size: 12px;
-  opacity: 0.7;
 }
 
 /* ===== Start Journey Button ===== */
@@ -1108,7 +1080,7 @@ body {
 /* ===== Toast ===== */
 .toast {
   position: fixed;
-  bottom: 24px;
+  bottom: 96px;
   left: 50%;
   transform: translateX(-50%) translateY(100px);
   background: var(--text-primary);
@@ -1121,6 +1093,9 @@ body {
   z-index: 2000;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
+  max-width: calc(100vw - 40px);
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .toast.show {
@@ -1272,23 +1247,46 @@ body {
   }
 }
 
-/* ===== Navigation Arrow ===== */
+/* ===== Navigation Arrow (Waze-style) ===== */
 .nav-arrow-container {
-    width: 36px;
-    height: 36px;
+    width: 52px;
+    height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
-    filter: drop-shadow(0 2px 6px rgba(66, 133, 244, 0.5));
 }
 
 .nav-arrow {
-    animation: navPulse 2s ease-in-out infinite;
+    animation: navGlow 2s ease-in-out infinite;
+    will-change: filter;
 }
 
-@keyframes navPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.1); }
+@keyframes navGlow {
+    0%, 100% { filter: drop-shadow(0 3px 8px rgba(26, 115, 232, 0.6)); }
+    50%       { filter: drop-shadow(0 3px 14px rgba(26, 115, 232, 1.0)); }
+}
+
+/* MapLibre compass during navigation */
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group {
+    border-radius: 12px !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18) !important;
+    overflow: hidden;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl-compass {
+    border-radius: 50% !important;
+    width: 44px !important;
+    height: 44px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(255,255,255,0.95) !important;
+    margin: 8px !important;
+}
+
+[data-theme="dark"] .maplibregl-ctrl-top-right .maplibregl-ctrl-compass {
+    background: rgba(40,40,60,0.95) !important;
+    filter: invert(1) hue-rotate(180deg);
 }
 
 /* ===== Route Labels on Map ===== */
@@ -1472,7 +1470,14 @@ body {
     border-color: var(--accent);
 }
 
-/* ===== Navigation HUD Improvements ===== */
+/* ===== Navigation HUD — Waze Top Card + Google Maps Bottom Bar ===== */
+
+@keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Container wraps the top cards only (bottom bar is separate) */
 .nav-hud-container {
     position: fixed;
     top: 0;
@@ -1481,103 +1486,266 @@ body {
     z-index: 1003;
     display: flex;
     flex-direction: column;
-    animation: slideDown 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: slideDown 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
 }
 
-.nav-step-banner {
-    background: linear-gradient(135deg, #1565c0, #1976d2);
+.nav-hud-container > * {
+    pointer-events: auto;
+}
+
+/* Waze-style large turn card */
+.nav-turn-card {
+    background: linear-gradient(160deg, #0d47a1 0%, #1565c0 60%, #1976d2 100%);
     color: white;
-    padding: 12px 20px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    padding: 16px 20px;
+    gap: 16px;
+    min-height: 84px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
-.nav-step-icon {
-    width: 40px;
-    height: 40px;
-    background: rgba(255,255,255,0.2);
-    border-radius: 50%;
+.nav-turn-icon-wrap {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-}
-
-.nav-step-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.nav-step-instruction {
-    font-size: 16px;
-    font-weight: 600;
-    text-transform: capitalize;
-}
-
-.nav-step-distance {
-    font-size: 12px;
-    opacity: 0.8;
-}
-
-.nav-eta-banner {
-    position: relative;
-    background: linear-gradient(135deg, #1a73e8, #4285f4);
-    color: white;
-    padding: 12px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 4px 20px rgba(26, 115, 232, 0.3);
-}
-
-.nav-speed-badge {
-    background: rgba(255,255,255,0.2);
-    padding: 6px 12px;
-    border-radius: var(--radius-full);
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
     backdrop-filter: blur(4px);
 }
 
-.nav-speed-value {
-    font-size: 20px;
+.nav-turn-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.nav-turn-distance {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    line-height: 1;
+    margin-bottom: 5px;
+}
+
+.nav-turn-street {
+    font-size: 16px;
+    font-weight: 600;
+    opacity: 0.95;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.nav-turn-instruction {
+    font-size: 12px;
+    opacity: 0.7;
+    text-transform: capitalize;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Next step preview bar */
+.nav-next-step {
+    background: linear-gradient(180deg, #1565c0 0%, #1976d2 100%);
+    color: rgba(255, 255, 255, 0.82);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 20px;
+    font-size: 13px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.nav-next-step-label {
     font-weight: 700;
+    opacity: 0.65;
+    white-space: nowrap;
+}
+
+.nav-next-step-instruction {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+.nav-next-step-dist {
+    font-weight: 700;
+    white-space: nowrap;
+    opacity: 0.85;
+}
+
+/* Lane assist bar */
+.lane-assist-banner {
+    background: #1976d2;
+    color: white;
+    padding: 8px 20px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.lane-assist-label {
+    font-size: 11px;
+    opacity: 0.7;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.lane-indicators {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.lane-icon {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.lane-icon.valid {
+    background: #34a853;
     color: white;
 }
 
-.nav-speed-unit {
-    font-size: 11px;
-    font-weight: 500;
-    color: rgba(255,255,255,0.8);
+.lane-icon.invalid {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.4);
 }
 
+/* BOTTOM: Google Maps-style ETA bar (fixed to bottom) */
+.nav-bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1002;
+    background: var(--bg-glass);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+    padding: 14px 20px 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Waze-style circular speed badge */
+.nav-speed-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid var(--accent);
+    background: var(--bg-card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(66, 133, 244, 0.25);
+    transition: border-color 0.4s ease;
+}
+
+.nav-speed-circle .nav-speed-value {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.nav-speed-circle .nav-speed-unit {
+    font-size: 9px;
+    color: var(--text-tertiary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 1px;
+}
+
+/* ETA info center block */
+.nav-bottom-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.nav-bottom-time {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    white-space: nowrap;
+    letter-spacing: -0.3px;
+}
+
+.nav-bottom-dot {
+    color: var(--text-tertiary);
+    font-size: 18px;
+    font-weight: 300;
+    flex-shrink: 0;
+}
+
+.nav-bottom-dist {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.nav-bottom-arrival {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+/* End navigation button */
 .nav-end-btn {
-    padding: 8px 20px;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: none;
     background: #ea4335;
     color: white;
-    border: none;
-    border-radius: var(--radius-full);
     cursor: pointer;
-    font-weight: 700;
-    font-size: 14px;
-    font-family: var(--font);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 2px 10px rgba(234, 67, 53, 0.45);
     transition: all var(--transition);
-    box-shadow: 0 2px 8px rgba(234, 67, 53, 0.3);
+    font-family: var(--font);
 }
 
 .nav-end-btn:hover {
     background: #d93025;
-    transform: translateY(-1px);
+    transform: scale(1.1);
+    box-shadow: 0 4px 16px rgba(234, 67, 53, 0.55);
 }
 
 /* Re-center button during navigation */
 .nav-recenter-btn {
     position: fixed;
     right: 16px;
-    bottom: 100px;
+    bottom: 96px;
     width: 48px;
     height: 48px;
     border: none;
@@ -1596,8 +1764,68 @@ body {
 }
 
 .nav-recenter-btn:hover {
-    transform: scale(1.1);
+    transform: scale(1.12);
     box-shadow: var(--shadow-xl);
+}
+
+/* ===== Demo Navigation Button ===== */
+@keyframes btnPulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(26, 115, 232, 0.45); }
+    50%       { box-shadow: 0 6px 30px rgba(26, 115, 232, 0.75); }
+}
+
+.demo-nav-btn {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: linear-gradient(135deg, #1a73e8, #4285f4);
+    color: white;
+    border: none;
+    border-radius: var(--radius-full);
+    padding: 14px 26px;
+    font-size: 14px;
+    font-weight: 700;
+    font-family: var(--font);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+    white-space: nowrap;
+    animation: btnPulse 2.5s ease-in-out infinite;
+    letter-spacing: 0.1px;
+}
+
+.demo-nav-btn:hover:not(:disabled) {
+    transform: translateX(-50%) translateY(-3px);
+    box-shadow: 0 8px 30px rgba(26, 115, 232, 0.6) !important;
+    animation: none;
+}
+
+.demo-nav-btn:active:not(:disabled) {
+    transform: translateX(-50%) translateY(0);
+}
+
+.demo-nav-btn:disabled {
+    opacity: 0.8;
+    cursor: not-allowed;
+    animation: none;
+}
+
+.demo-nav-btn.loading {
+    background: linear-gradient(135deg, #1557b0, #1a73e8);
+}
+
+.demo-btn-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
 }
 
 /* ===== Place Action Pills (Google Maps Style) ===== */

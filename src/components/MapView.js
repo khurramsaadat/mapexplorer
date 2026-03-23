@@ -79,6 +79,7 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
     const locationCircleRef = useRef(null);
     const navArrowRef = useRef(null);
     const navFollowRef = useRef(true);
+    const navControlRef = useRef(null);
     const langRef = useRef(lang);
 
     useEffect(() => {
@@ -398,72 +399,186 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
         },
 
         // Navigation mode
-        startNavigation(route) {
+        startNavigation(route, overridePosition = null) {
             if (!mapRef.current) return;
             const map = mapRef.current;
             navFollowRef.current = true;
 
-            // Create blue navigation arrow
+            // Hide static location marker — nav arrow takes over
+            if (locationMarkerRef.current) {
+                locationMarkerRef.current.getElement().style.opacity = '0';
+            }
+
+            // Waze-style nav arrow: large, rounded, drop-shadow
             const el = document.createElement('div');
             el.className = 'nav-arrow-container';
             el.innerHTML = `
                 <div class="nav-arrow">
-                    <svg width="36" height="36" viewBox="0 0 36 36">
+                    <svg width="52" height="52" viewBox="0 0 52 52">
                         <defs>
-                            <filter id="nav-glow" x="-50%" y="-50%" width="200%" height="200%">
-                                <feGaussianBlur stdDeviation="2" result="blur" />
-                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            <filter id="nav-shadow" x="-50%" y="-50%" width="200%" height="200%">
+                                <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="rgba(0,0,0,0.45)" />
                             </filter>
+                            <radialGradient id="arrowGrad" cx="40%" cy="30%" r="70%">
+                                <stop offset="0%" stop-color="#5b9ef4"/>
+                                <stop offset="100%" stop-color="#1a73e8"/>
+                            </radialGradient>
                         </defs>
-                        <polygon points="18,2 28,30 18,24 8,30" fill="#4285f4" stroke="white" stroke-width="2" filter="url(#nav-glow)" />
+                        <path d="M26 4 L40 42 Q26 34 12 42 Z" fill="url(#arrowGrad)" stroke="white" stroke-width="3" stroke-linejoin="round" filter="url(#nav-shadow)" />
+                        <circle cx="26" cy="24" r="5" fill="white" opacity="0.85"/>
                     </svg>
                 </div>
             `;
 
             if (navArrowRef.current) navArrowRef.current.remove();
-            
-            // Get current position to place arrow
-            if (navigator.geolocation) {
+
+            // Add compass/north indicator during navigation
+            if (navControlRef.current) {
+                try { map.removeControl(navControlRef.current); } catch(e) {}
+            }
+            navControlRef.current = new maplibregl.NavigationControl({
+                showZoom: false,
+                showCompass: true,
+                visualizePitch: true,
+            });
+            map.addControl(navControlRef.current, 'top-right');
+
+            const placeArrow = (lat, lng) => {
+                navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
+                    .setLngLat([lng, lat])
+                    .addTo(map);
+                // Fly in close with dramatic perspective tilt
+                map.flyTo({
+                    center: [lng, lat],
+                    zoom: 18,
+                    duration: 2200,
+                    pitch: 60,
+                    bearing: 0,
+                    offset: [0, 80],
+                    essential: true,
+                });
+            };
+
+            if (overridePosition) {
+                placeArrow(overridePosition.lat, overridePosition.lng);
+            } else if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        const { latitude: lat, longitude: lng } = pos.coords;
-                        navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
-                            .setLngLat([lng, lat])
-                            .addTo(map);
-                        
-                        map.flyTo({ center: [lng, lat], zoom: 17, duration: 1500, pitch: 45 });
-                    },
+                    (pos) => placeArrow(pos.coords.latitude, pos.coords.longitude),
                     () => {
-                        // Fallback: place arrow at route start
                         const start = route.geometry.coordinates[0];
-                        navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
-                            .setLngLat(start)
-                            .addTo(map);
-                        map.flyTo({ center: start, zoom: 17, duration: 1500, pitch: 45 });
+                        placeArrow(start[1], start[0]);
                     },
                     { enableHighAccuracy: true, timeout: 10000 }
                 );
+            } else {
+                const start = route.geometry.coordinates[0];
+                placeArrow(start[1], start[0]);
             }
         },
 
-        updateNavPosition(lat, lng, heading) {
+        simulateNavigation(routeCoords, { steps = [], onPositionUpdate, onStepUpdate, onComplete } = {}) {
+            if (!routeCoords || routeCoords.length < 2) return () => {};
+
+            const coords = routeCoords;
+            const totalPts = coords.length;
+            const tickMs = 100;
+            // Complete the full route in ~600 ticks (~60 seconds)
+            const advancePerTick = totalPts / 600;
+            let currentIdxFloat = 0;
+            let lastStepIdx = 0;
+            let stopped = false;
+
+            function calcBearing(from, to) {
+                const dLng = (to[0] - from[0]) * Math.PI / 180;
+                const lat1 = from[1] * Math.PI / 180;
+                const lat2 = to[1] * Math.PI / 180;
+                const y = Math.sin(dLng) * Math.cos(lat2);
+                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+                return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            }
+
+            const timer = setInterval(() => {
+                if (stopped) return;
+                currentIdxFloat += advancePerTick;
+                const idx = Math.min(Math.floor(currentIdxFloat), totalPts - 1);
+
+                if (idx >= totalPts - 1) {
+                    stopped = true;
+                    clearInterval(timer);
+                    const last = coords[totalPts - 1];
+                    onPositionUpdate?.(last[1], last[0], 0);
+                    onComplete?.();
+                    return;
+                }
+
+                const curr = coords[idx];
+                const lookAhead = coords[Math.min(idx + 3, totalPts - 1)];
+                const hdg = calcBearing(curr, lookAhead);
+
+                onPositionUpdate?.(curr[1], curr[0], hdg);
+
+                // Advance step when close to the next step's maneuver location
+                for (let si = lastStepIdx + 1; si < steps.length; si++) {
+                    const stepLoc = steps[si]?.maneuver?.location;
+                    if (!stepLoc) continue;
+                    const dist = Math.sqrt(
+                        Math.pow(curr[0] - stepLoc[0], 2) +
+                        Math.pow(curr[1] - stepLoc[1], 2)
+                    ) * 111000;
+                    if (dist < 150) {
+                        lastStepIdx = si;
+                        onStepUpdate?.(steps[si], si);
+                        break;
+                    }
+                }
+            }, tickMs);
+
+            return () => {
+                stopped = true;
+                clearInterval(timer);
+            };
+        },
+
+        setUserMarker(lat, lng) {
+            if (!mapRef.current) return;
+            if (locationMarkerRef.current) locationMarkerRef.current.remove();
+            const el = document.createElement('div');
+            el.className = 'location-pulse-container';
+            el.innerHTML = '<div class="location-pulse"></div>';
+            locationMarkerRef.current = new maplibregl.Marker({ element: el })
+                .setLngLat([lng, lat])
+                .addTo(mapRef.current);
+        },
+
+        updateNavPosition(lat, lng, heading, speedKmh = null) {
             if (!mapRef.current) return;
             const map = mapRef.current;
 
             if (navArrowRef.current) {
                 navArrowRef.current.setLngLat([lng, lat]);
-                // Rotate arrow based on heading
                 if (heading !== null && heading !== undefined) {
                     navArrowRef.current.setRotation(heading);
                 }
             }
 
-            // Auto-follow
             if (navFollowRef.current) {
-                map.easeTo({ 
-                    center: [lng, lat], 
-                    duration: 500,
-                    bearing: heading || map.getBearing(),
+                // Dynamic zoom: farther out at highway speed, closer at city speed
+                let targetZoom = 8;
+                if (speedKmh !== null) {
+                    if (speedKmh >= 90)      targetZoom = 15.0;
+                    else if (speedKmh >= 70) targetZoom = 15.5;
+                    else if (speedKmh >= 50) targetZoom = 16.0;
+                    else if (speedKmh >= 30) targetZoom = 17.0;
+                    else                     targetZoom = 18.0;
+                }
+                map.easeTo({
+                    center: [lng, lat],
+                    duration: 250,
+                    bearing: heading !== null && heading !== undefined ? heading : map.getBearing(),
+                    pitch: 60,
+                    zoom: targetZoom,
+                    // Offset shifts the car below center so more road ahead is visible
+                    offset: [0, 80],
                 });
             }
         },
@@ -473,9 +588,18 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
                 navArrowRef.current.remove();
                 navArrowRef.current = null;
             }
+            // Remove compass
+            if (navControlRef.current && mapRef.current) {
+                try { mapRef.current.removeControl(navControlRef.current); } catch(e) {}
+                navControlRef.current = null;
+            }
+            // Restore location marker if it was hidden
+            if (locationMarkerRef.current) {
+                locationMarkerRef.current.getElement().style.opacity = '1';
+            }
             navFollowRef.current = false;
             if (mapRef.current) {
-                mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 500 });
+                mapRef.current.easeTo({ pitch: 0, bearing: 0, duration: 800, zoom: 14 });
             }
         },
 
@@ -487,7 +611,13 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             navFollowRef.current = true;
             if (navArrowRef.current && mapRef.current) {
                 const lngLat = navArrowRef.current.getLngLat();
-                mapRef.current.flyTo({ center: [lngLat.lng, lngLat.lat], zoom: 17, duration: 1000 });
+                mapRef.current.easeTo({
+                    center: [lngLat.lng, lngLat.lat],
+                    zoom: 17,
+                    pitch: 60,
+                    duration: 800,
+                    offset: [0, 80],
+                });
             }
         },
 
