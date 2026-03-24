@@ -276,54 +276,29 @@ export default function DirectionsPanel({
 
             {routes && routes.length > 0 && !loading && (
                 <div className="route-summary-panel">
-                    {/* Selected route summary */}
-                    <div className="route-selected-summary">
-                        <div className="route-summary-time">
-                            {routes[activeRouteIndex].duration}
+                    {/* Google Maps style: big time + distance, label, start */}
+                    <div className="route-gmap-summary">
+                        <div className="route-gmap-time-row">
+                            <span className="route-gmap-time">{routes[activeRouteIndex].duration}</span>
+                            <span className="route-gmap-dist">({routes[activeRouteIndex].distance})</span>
                         </div>
-                        <div className="route-summary-meta">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M5 17a2 2 0 1 0 4 0 2 2 0 0 0-4 0zm10 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0zM3 9l2-5h14l2 5M3 9v8h2m14-8v8h2M3 9h18" />
-                            </svg>
-                            {routes[activeRouteIndex].distance}
+                        <div className="route-gmap-label">
+                            {t.fastestRoute || 'Fastest route'}
                             {routes.length > 1 && (
-                                <span className="route-alt-hint">
-                                    · {routes.length - 1} alt{routes.length > 2 ? 's' : ''} on map
-                                </span>
+                                <span className="route-alt-map-hint"> · {routes.length - 1} other route{routes.length > 2 ? 's' : ''} on map</span>
                             )}
                         </div>
                     </div>
-
-                    {/* Alternative route tabs (tap to select, others are on the map) */}
-                    {routes.length > 1 && (
-                        <div className="route-tab-row">
-                            {routes.map((r, i) => (
-                                <button
-                                    key={i}
-                                    className={`route-tab ${i === activeRouteIndex ? 'active' : ''}`}
-                                    onClick={() => {
-                                        setActiveRouteIndex(i);
-                                        onRouteFound?.(routes, i, originCoords, destCoords, mode);
-                                    }}
-                                    id={`route-option-${i}`}
-                                >
-                                    <span className="route-tab-num">{i + 1}</span>
-                                    <span className="route-tab-time">{r.duration}</span>
-                                    <span className="route-tab-dist">{r.distance}</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
 
                     <button
                         className="start-journey-btn"
                         id="start-journey-btn"
                         onClick={() => onStartJourney?.(routes[activeRouteIndex])}
                     >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" />
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" />
                         </svg>
-                        {t.startTrip || 'Start your trip'}
+                        {t.startTrip || 'Start'}
                     </button>
                 </div>
             )}

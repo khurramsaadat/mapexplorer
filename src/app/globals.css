@@ -107,25 +107,29 @@ body {
   to { transform: translateY(0); opacity: 1; }
 }
 
-/* ===== Start Journey Button ===== */
+/* ===== Start Journey Button (global base) ===== */
 .start-journey-btn {
-  padding: 10px 24px;
-  background: linear-gradient(135deg, #34a853, #2d9649);
+  padding: 14px 24px;
+  background: #1a73e8;
   color: white;
   border: none;
   border-radius: var(--radius-full);
   cursor: pointer;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
   font-family: var(--font);
-  transition: all var(--transition);
-  box-shadow: 0 2px 8px rgba(52, 168, 83, 0.3);
+  transition: background 0.18s ease, transform 0.1s ease;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
 }
 
 .start-journey-btn:hover {
+  background: #1557b0;
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(52, 168, 83, 0.4);
 }
 
 .start-journey-btn:active {
@@ -315,119 +319,51 @@ body {
   transform: translateX(0);
 }
 
-/* ===== Route Summary Panel (replaces old list) ===== */
+/* ===== Route Summary Panel — Google Maps style ===== */
 .route-summary-panel {
     padding: 0 16px 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
-.route-selected-summary {
-    background: var(--bg-secondary);
-    border: 1.5px solid #1a73e8;
-    border-radius: 14px;
-    padding: 14px 16px;
+/* Google Maps-style time + distance row */
+.route-gmap-summary {
+    padding: 6px 0 0;
+}
+
+.route-gmap-time-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-}
-
-.route-summary-time {
-    font-size: 22px;
-    font-weight: 700;
-    color: #1a73e8;
-    white-space: nowrap;
-}
-
-.route-summary-meta {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
-.route-alt-hint {
-    color: #34a853;
-    font-weight: 600;
-    font-size: 12px;
-}
-
-/* Alternative route tabs (compact row) */
-.route-tab-row {
-    display: flex;
+    align-items: baseline;
     gap: 8px;
+    flex-wrap: wrap;
 }
 
-.route-tab {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 10px 8px;
-    border-radius: 12px;
-    border: 1.5px solid var(--border);
-    background: var(--bg-secondary);
-    cursor: pointer;
-    transition: all 0.18s ease;
-}
-
-.route-tab.active {
-    border-color: #1a73e8;
-    background: rgba(26, 115, 232, 0.08);
-}
-
-.route-tab-num {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--text-secondary);
-    color: white;
-    font-size: 11px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.route-tab.active .route-tab-num {
-    background: #1a73e8;
-}
-
-.route-tab-time {
-    font-size: 13px;
+.route-gmap-time {
+    font-size: 26px;
     font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.1;
 }
 
-.route-tab-dist {
-    font-size: 11px;
+.route-gmap-dist {
+    font-size: 16px;
+    font-weight: 500;
     color: var(--text-secondary);
 }
 
-.start-journey-btn {
-    width: 100%;
-    padding: 14px;
-    font-size: 16px;
-    border-radius: 24px;
-    background: #1a73e8;
-    color: white;
-    border: none;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 8px;
-    transition: background 0.2s ease;
+.route-gmap-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 3px;
 }
 
-.start-journey-btn:hover {
-    background: #1557b0;
+.route-alt-map-hint {
+    color: #34a853;
+    font-weight: 500;
 }
+
+
 
 
 .directions-header {
@@ -1310,21 +1246,6 @@ body {
     overflow: hidden;
 }
 
-.maplibregl-ctrl-top-right .maplibregl-ctrl-compass {
-    border-radius: 50% !important;
-    width: 44px !important;
-    height: 44px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: rgba(255,255,255,0.95) !important;
-    margin: 8px !important;
-}
-
-[data-theme="dark"] .maplibregl-ctrl-top-right .maplibregl-ctrl-compass {
-    background: rgba(40,40,60,0.95) !important;
-    filter: invert(1) hue-rotate(180deg);
-}
 
 /* ===== Route Labels on Map (numbered bubbles) ===== */
 .route-label {
@@ -1411,28 +1332,15 @@ body {
     color: #eee !important;
 }
 
-/* ===== Compass — persistent bottom-right ===== */
-.maplibregl-ctrl-bottom-right .maplibregl-ctrl-group {
-    border-radius: 50% !important;
-    overflow: visible !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    border: none !important;
+/* ===== Custom Compass Button ===== */
+.compass-btn {
+    /* inherits .map-control-btn sizing */
+    position: relative;
 }
 
-.maplibregl-ctrl-bottom-right .maplibregl-ctrl-compass {
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 50% !important;
-    background: rgba(255,255,255,0.93) !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.22) !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-[data-theme="dark"] .maplibregl-ctrl-bottom-right .maplibregl-ctrl-compass {
-    background: rgba(28,28,44,0.95) !important;
+.compass-btn.rotated {
+    box-shadow: 0 2px 8px rgba(234, 67, 53, 0.25) !important;
+    border-color: rgba(234, 67, 53, 0.3) !important;
 }
 
 /* ===== Settings Panel ===== */
@@ -1990,21 +1898,16 @@ body {
     }
 
     .route-summary-panel {
-        padding: 0 12px 14px !important;
-        gap: 10px !important;
+        padding: 0 12px 12px !important;
+        gap: 8px !important;
     }
 
-    .route-summary-time {
-        font-size: 18px !important;
-    }
-
-    .route-tab {
-        padding: 8px 6px !important;
+    .route-gmap-time {
+        font-size: 22px !important;
     }
 
     .start-journey-btn {
         padding: 12px !important;
-        font-size: 14px !important;
-        border-radius: 20px !important;
+        font-size: 15px !important;
     }
 }

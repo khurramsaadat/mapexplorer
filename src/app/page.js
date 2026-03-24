@@ -131,6 +131,7 @@ export default function Home() {
   const [toast, setToast] = useState({ message: '', visible: false });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapRouteSelectIndex, setMapRouteSelectIndex] = useState(null);
+  const [mapBearing, setMapBearing] = useState(0);
 
   // Navigation state
   const [isNavigating, setIsNavigating] = useState(false);
@@ -202,6 +203,14 @@ export default function Home() {
 
   const handleRouteSelect = useCallback((index) => {
     setMapRouteSelectIndex(index);
+  }, []);
+
+  const handleBearingChange = useCallback((bearing) => {
+    setMapBearing(Math.round(bearing));
+  }, []);
+
+  const handleCompassReset = useCallback(() => {
+    mapRef.current?.resetNorth();
   }, []);
 
   const handleEndJourney = useCallback(() => {
@@ -440,6 +449,7 @@ export default function Home() {
         ref={mapRef}
         onMapClick={handleMapClick}
         onRouteSelect={handleRouteSelect}
+        onBearingChange={handleBearingChange}
         currentLayer={currentLayer}
         lang={lang}
         isDark={isDark}
@@ -487,6 +497,8 @@ export default function Home() {
           isFullscreen={isFullscreen}
           onFullscreenToggle={handleFullscreenToggle}
           onSettingsOpen={() => setSettingsOpen(true)}
+          bearing={mapBearing}
+          onCompassReset={handleCompassReset}
           t={t}
         />
       )}

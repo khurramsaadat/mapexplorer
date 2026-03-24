@@ -92,7 +92,7 @@ function getTrafficSegments(geometry, routeDuration, routeDistance) {
     return segments;
 }
 
-const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, currentLayer, lang, isDark }, ref) {
+const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBearingChange, currentLayer, lang, isDark }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef([]);
@@ -102,8 +102,10 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
     const locationCircleRef = useRef(null);
     const navArrowRef = useRef(null);
     const navFollowRef = useRef(true);
-    const navControlRef = useRef(null);
+    const onBearingChangeRef = useRef(onBearingChange);
     const langRef = useRef(lang);
+
+    useEffect(() => { onBearingChangeRef.current = onBearingChange; }, [onBearingChange]);
 
     useEffect(() => {
         langRef.current = lang;
@@ -132,6 +134,14 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             localStorage.setItem('map_zoom', Math.round(map.getZoom()).toString());
         });
 
+        // Emit bearing so custom compass can rotate
+        map.on('rotate', () => {
+            onBearingChangeRef.current?.(map.getBearing());
+        });
+        map.on('rotateend', () => {
+            onBearingChangeRef.current?.(map.getBearing());
+        });
+
         map.on('click', async (e) => {
             // Check if a route line was clicked
             const features = map.queryRenderedFeatures(e.point);
@@ -149,16 +159,8 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             onMapClick?.(place);
         });
 
-        // Scale bar — bottom-left so it doesn't clash with our controls
+        // Scale bar — bottom-left
         map.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left');
-
-        // Persistent compass/north arrow — always visible (top-right, below attribution)
-        const compassCtrl = new maplibregl.NavigationControl({
-            showZoom: false,
-            showCompass: true,
-            visualizePitch: true,
-        });
-        map.addControl(compassCtrl, 'bottom-right');
 
         map.on('load', () => {
             applyStyleTweaks(map);
@@ -219,6 +221,10 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
     useImperativeHandle(ref, () => ({
         flyTo(lat, lon, zoom = 16) {
             mapRef.current?.flyTo({ center: [lon, lat], zoom, duration: 1500 });
+        },
+
+        resetNorth() {
+            mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: 500 });
         },
 
         addMarker(lat, lon, popupText, iconColor = 'default') {
