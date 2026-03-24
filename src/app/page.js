@@ -114,16 +114,8 @@ function getManeuverSVG(step) {
   );
 }
 
-// Dubai Demo constants
-const DEMO_ORIGIN = { lat: 25.1972, lng: 55.2744, name: 'Burj Khalifa, Dubai' };
-const DEMO_DEST = { lat: 25.2528, lng: 55.3617, name: 'Dubai Intl Airport Terminal 3' };
-
 export default function Home() {
   const mapRef = useRef(null);
-  const simulationStopFnRef = useRef(null);
-  const simSpeedIntervalRef = useRef(null);
-  // Ref so the simulation closure always reads the latest speed
-  const simulatedSpeedRef = useRef(null);
 
   const [isDark, setIsDark] = useState(false);
   const [currentLayer, setCurrentLayer] = useState('streets');
@@ -139,14 +131,12 @@ export default function Home() {
   const [toast, setToast] = useState({ message: '', visible: false });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapRouteSelectIndex, setMapRouteSelectIndex] = useState(null);
-  const [isDemoLoading, setIsDemoLoading] = useState(false);
 
   // Navigation state
   const [isNavigating, setIsNavigating] = useState(false);
   const [navRoute, setNavRoute] = useState(null);
   const [navMode, setNavMode] = useState('driving');
   const [liveSpeed, setLiveSpeed] = useState(null);
-  const [simulatedSpeed, setSimulatedSpeed] = useState(null);
   const [currentStep, setCurrentStep] = useState(null);
   const [navStepIndex, setNavStepIndex] = useState(0);
   const [remainingDuration, setRemainingDuration] = useState(null);
@@ -214,21 +204,7 @@ export default function Home() {
     setMapRouteSelectIndex(index);
   }, []);
 
-  const stopSimulation = useCallback(() => {
-    if (simulationStopFnRef.current) {
-      simulationStopFnRef.current();
-      simulationStopFnRef.current = null;
-    }
-    if (simSpeedIntervalRef.current) {
-      clearInterval(simSpeedIntervalRef.current);
-      simSpeedIntervalRef.current = null;
-    }
-    simulatedSpeedRef.current = null;
-    setSimulatedSpeed(null);
-  }, []);
-
   const handleEndJourney = useCallback(() => {
-    stopSimulation();
     setIsNavigating(false);
     setNavRoute(null);
     setLiveSpeed(null);
@@ -244,7 +220,7 @@ export default function Home() {
     mapRef.current?.stopNavigation();
     mapRef.current?.clearRoute();
     showToast(t.navEnded);
-  }, [showToast, t.navEnded, stopSimulation]);
+  }, [showToast, t.navEnded]);
 
   const handleStartJourney = useCallback((route) => {
     setIsNavigating(true);
@@ -295,139 +271,6 @@ export default function Home() {
       showToast('Could not find a route.');
     }
   }, [userLocation, handleStartJourney, showToast]);
-
-  const handleDemoNavigation = useCallback(async () => {
-    if (isDemoLoading || isNavigating) return;
-    setIsDemoLoading(true);
-
-    try {
-      // Step 1: Zero in on start location with top-down overview
-      showToast('📍 Your location: Burj Khalifa, Dubai');
-      mapRef.current?.flyTo(DEMO_ORIGIN.lat, DEMO_ORIGIN.lng, 16);
-      setUserLocation({ lat: DEMO_ORIGIN.lat, lon: DEMO_ORIGIN.lng });
-      mapRef.current?.setUserMarker(DEMO_ORIGIN.lat, DEMO_ORIGIN.lng);
-
-      // Let user see their start location
-      await new Promise(r => setTimeout(r, 1400));
-
-      // Step 2: Calculate route
-      showToast('Calculating route to Dubai Airport T3...');
-      const { getDirections } = await import('@/lib/api');
-      const routes = await getDirections(
-        DEMO_ORIGIN.lat, DEMO_ORIGIN.lng,
-        DEMO_DEST.lat, DEMO_DEST.lng,
-        'driving', 3
-      );
-
-      if (!routes || routes.length === 0) {
-        showToast('Could not calculate route. Check internet connection.');
-        setIsDemoLoading(false);
-        return;
-      }
-
-      const route = routes[0];
-      setNavMode('driving');
-
-      // Step 3: Show route overview
-      mapRef.current?.drawRoutes(
-        routes, 0,
-        { lat: DEMO_ORIGIN.lat, lon: DEMO_ORIGIN.lng },
-        { lat: DEMO_DEST.lat, lon: DEMO_DEST.lng },
-        'driving'
-      );
-
-      showToast(`🗺 ${route.duration} · ${route.distance} to Dubai Airport T3`);
-      // Give user time to see the full route
-      await new Promise(r => setTimeout(r, 2000));
-
-      // Step 4: Start navigation HUD
-      setIsNavigating(true);
-      setNavRoute(route);
-      setDirectionsOpen(false);
-      setSelectedPlace(null);
-      setRemainingDuration(route.rawDuration);
-      setRemainingDistance(route.distance);
-      setCurrentStep(route.steps?.[0] || null);
-      setNavStepIndex(0);
-      navStartTimeRef.current = Date.now();
-
-      // Place arrow and fly in close with 60° perspective tilt
-      mapRef.current?.startNavigation(route, { lat: DEMO_ORIGIN.lat, lng: DEMO_ORIGIN.lng });
-
-      showToast('🚗 Navigating to Dubai Airport Terminal 3');
-
-      // Step 5: Wait for the fly-in zoom animation to complete, THEN start driving
-      await new Promise(r => setTimeout(r, 2500));
-
-      // Simulated speed (city: ~45–85 km/h with variation)
-      const baseSpeed = 62;
-      simulatedSpeedRef.current = baseSpeed;
-      setSimulatedSpeed(baseSpeed);
-      simSpeedIntervalRef.current = setInterval(() => {
-        const v = Math.max(20, baseSpeed + Math.round((Math.random() - 0.5) * 40));
-        simulatedSpeedRef.current = v;
-        setSimulatedSpeed(v);
-      }, 2000);
-
-      // Total sim time: ~600 ticks × 100ms = ~60 seconds of driving
-      const totalSimSeconds = 60;
-
-      let arrivedOnce = false;
-      const stopFn = mapRef.current?.simulateNavigation(
-        route.geometry.coordinates,
-        {
-          steps: route.steps,
-          onPositionUpdate: (lat, lng, bearing) => {
-            // Pass current speed so zoom auto-adjusts
-            mapRef.current?.updateNavPosition(lat, lng, bearing, simulatedSpeedRef.current);
-
-            const elapsed = (Date.now() - navStartTimeRef.current) / 1000;
-            const progress = Math.min(elapsed / totalSimSeconds, 1);
-            const remainSecs = Math.max(0, route.rawDuration * (1 - progress));
-            const mins = Math.round(remainSecs / 60);
-            setRemainingDuration(
-              mins > 60 ? `${Math.floor(mins / 60)} hr ${mins % 60} min` : `${mins} min`
-            );
-            const distNum = parseFloat(route.distance);
-            const remainDist = (distNum * (1 - progress)).toFixed(1);
-            setRemainingDistance(
-              parseFloat(remainDist) < 1
-                ? `${Math.round(parseFloat(remainDist) * 1000)} m`
-                : `${remainDist} km`
-            );
-          },
-          onStepUpdate: (step, idx) => {
-            setCurrentStep(step);
-            setNavStepIndex(idx);
-          },
-          onComplete: () => {
-            if (arrivedOnce) return;
-            arrivedOnce = true;
-            stopSimulation();
-            simulatedSpeedRef.current = 0;
-            setSimulatedSpeed(0);
-            showToast('🎉 Arrived at Dubai Airport Terminal 3!');
-            setTimeout(() => {
-              setIsNavigating(false);
-              setNavRoute(null);
-              setCurrentStep(null);
-              setSimulatedSpeed(null);
-              simulatedSpeedRef.current = null;
-              mapRef.current?.stopNavigation();
-              mapRef.current?.clearRoute();
-            }, 3500);
-          },
-        }
-      );
-
-      simulationStopFnRef.current = stopFn;
-    } catch (err) {
-      console.error('Demo navigation error:', err);
-      showToast('Demo failed. Check connection.');
-    } finally {
-      setIsDemoLoading(false);
-    }
-  }, [isDemoLoading, isNavigating, showToast, stopSimulation]);
 
   const handleLayerChange = useCallback((layer) => setCurrentLayer(layer), []);
   const handleLangToggle = useCallback(() => setLang((prev) => (prev === 'en' ? 'ar' : 'en')), []);
@@ -492,7 +335,6 @@ export default function Home() {
 
   // Derive next step for preview
   const nextStep = navRoute?.steps?.[navStepIndex + 1] || null;
-  const displaySpeed = liveSpeed ?? simulatedSpeed;
 
   return (
     <>
@@ -554,7 +396,7 @@ export default function Home() {
             {/* Speed badge (Waze style) */}
             <div className="nav-speed-circle">
               <span className="nav-speed-value">
-                {displaySpeed !== null ? displaySpeed : '--'}
+                {liveSpeed !== null ? liveSpeed : '--'}
               </span>
               <span className="nav-speed-unit">km/h</span>
             </div>
@@ -660,31 +502,6 @@ export default function Home() {
           onStart={handleQuickStart}
           t={t}
         />
-      )}
-
-      {/* Demo Navigation Button */}
-      {!isNavigating && !directionsOpen && !selectedPlace && (
-        <button
-          className={`demo-nav-btn ${isDemoLoading ? 'loading' : ''}`}
-          onClick={handleDemoNavigation}
-          disabled={isDemoLoading}
-          id="demo-nav-btn"
-        >
-          {isDemoLoading ? (
-            <>
-              <div className="demo-btn-spinner" />
-              Calculating route...
-            </>
-          ) : (
-            <>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 12h18M3 12l4-4M3 12l4 4" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="17" cy="12" r="4" strokeWidth="1.5" />
-              </svg>
-              Demo: Burj Khalifa → Dubai Airport T3
-            </>
-          )}
-        </button>
       )}
 
       <Toast message={toast.message} visible={toast.visible} />

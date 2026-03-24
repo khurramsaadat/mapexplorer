@@ -6,64 +6,87 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { mapStyles, defaultCenter, defaultZoom } from '@/lib/tiles';
 import { reverseGeocode } from '@/lib/api';
 
+const ROAD_LABEL_LAYERS = [
+    'road-label', 'road_label', 'highway-name', 'highway-name-major',
+    'highway-name-minor', 'road-name', 'street-label',
+];
+
 const applyStyleTweaks = (map) => {
     try {
         const style = map.getStyle();
-        if (style && style.layers) {
-            style.layers.forEach((layer) => {
-                if (layer.layout && layer.layout['text-field']) {
-                    map.setLayoutProperty(layer.id, 'text-field', [
-                        'coalesce',
-                        ['get', 'name:en'],
-                        ['get', 'name_en'],
-                        ['get', 'name:latin'],
-                        ['get', 'name'],
-                    ]);
+        if (!style || !style.layers) return;
+
+        style.layers.forEach((layer) => {
+            // Show English road names
+            if (layer.layout && layer.layout['text-field']) {
+                map.setLayoutProperty(layer.id, 'text-field', [
+                    'coalesce',
+                    ['get', 'name:en'],
+                    ['get', 'name_en'],
+                    ['get', 'name:latin'],
+                    ['get', 'name'],
+                ]);
+            }
+
+            // POIs visible one zoom earlier
+            if (layer.id.includes('poi') || (layer['source-layer'] && layer['source-layer'].includes('poi'))) {
+                if (layer.minzoom !== undefined) {
+                    map.setLayerZoomRange(layer.id, Math.max(0, layer.minzoom - 2), layer.maxzoom || 24);
                 }
-                if (layer.id.includes('poi') || (layer['source-layer'] && layer['source-layer'].includes('poi'))) {
-                    if (layer.minzoom !== undefined) {
-                        map.setLayerZoomRange(layer.id, Math.max(0, layer.minzoom - 2), layer.maxzoom || 24);
-                    }
+            }
+
+            // Remove white text halo/glow box on all symbol layers
+            if (layer.type === 'symbol') {
+                try {
+                    map.setPaintProperty(layer.id, 'text-halo-width', 0);
+                    map.setPaintProperty(layer.id, 'text-halo-blur', 0);
+                    map.setPaintProperty(layer.id, 'text-halo-color', 'rgba(0,0,0,0)');
+                } catch (_) { /* layer may not support it */ }
+
+                // Road labels: align along road direction (map-aligned, not viewport)
+                const isRoadLabel = ROAD_LABEL_LAYERS.some(n => layer.id.toLowerCase().includes(n.toLowerCase())) ||
+                    (layer['source-layer'] === 'transportation_name') ||
+                    (layer.id.includes('road') && layer.id.includes('label'));
+                if (isRoadLabel) {
+                    try {
+                        map.setLayoutProperty(layer.id, 'text-rotation-alignment', 'map');
+                        map.setLayoutProperty(layer.id, 'text-pitch-alignment', 'viewport');
+                        map.setLayoutProperty(layer.id, 'text-max-angle', 25);
+                    } catch (_) { /* some layers don't support */ }
                 }
-                if (layer.type === 'symbol' && layer.paint) {
-                    if (layer.paint['text-halo-width'] !== undefined) {
-                        map.setPaintProperty(layer.id, 'text-halo-width', 0);
-                    }
-                    if (layer.paint['text-halo-blur'] !== undefined) {
-                        map.setPaintProperty(layer.id, 'text-halo-blur', 0);
-                    }
-                }
-            });
-        }
+            }
+        });
     } catch (e) {
         console.warn('Could not apply map style tweaks', e);
     }
 };
 
-// Estimate traffic color from OSRM weight_per_meter
-function getTrafficSegments(geometry, routeWeight, routeDuration, routeDistance) {
+// Google Maps traffic colors applied to route segments
+// Uses pseudo-random noise to simulate realistic traffic variation
+function getTrafficSegments(geometry, routeDuration, routeDistance) {
     const coords = geometry.coordinates;
     if (coords.length < 2) return [];
-    
-    const avgSpeed = routeDistance / routeDuration; // m/s
+
     const segments = [];
-    const chunkSize = Math.max(2, Math.floor(coords.length / 20)); // ~20 segments
-    
+    const chunkCount = Math.max(8, Math.min(30, Math.floor(coords.length / 5)));
+    const chunkSize = Math.max(2, Math.floor(coords.length / chunkCount));
+
     for (let i = 0; i < coords.length - 1; i += chunkSize) {
-        const end = Math.min(i + chunkSize, coords.length);
-        const segCoords = coords.slice(i, end + 1);
+        const end = Math.min(i + chunkSize + 1, coords.length);
+        const segCoords = coords.slice(i, end);
         if (segCoords.length < 2) continue;
-        
-        // Use pseudo-random based on coordinate to vary traffic colors
-        const midIdx = Math.floor(segCoords.length / 2);
-        const mid = segCoords[midIdx];
-        const noise = Math.abs(Math.sin(mid[0] * 1000 + mid[1] * 1000));
-        
-        let color = '#34a853'; // green - free flow
-        if (noise > 0.8) color = '#ea4335'; // red - heavy
-        else if (noise > 0.55) color = '#fbbc05'; // yellow - moderate
-        else if (noise > 0.35) color = '#ff9800'; // orange - slow  
-        
+
+        const mid = segCoords[Math.floor(segCoords.length / 2)];
+        // Deterministic noise: same route always shows same pattern
+        const noise = (Math.abs(Math.sin(mid[0] * 1731.5 + mid[1] * 2891.3)) +
+                       Math.abs(Math.cos(mid[0] * 971.3 + mid[1] * 1453.7))) / 2;
+
+        // Google Maps traffic palette
+        let color = '#34a853'; // green  — free flow
+        if      (noise > 0.78) color = '#ea4335'; // red    — heavy traffic
+        else if (noise > 0.58) color = '#ff7043'; // orange — slow
+        else if (noise > 0.38) color = '#fbbc05'; // yellow — moderate
+
         segments.push({ coordinates: segCoords, color });
     }
     return segments;
@@ -126,7 +149,16 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             onMapClick?.(place);
         });
 
-        map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-right');
+        // Scale bar — bottom-left so it doesn't clash with our controls
+        map.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-left');
+
+        // Persistent compass/north arrow — always visible (top-right, below attribution)
+        const compassCtrl = new maplibregl.NavigationControl({
+            showZoom: false,
+            showCompass: true,
+            visualizePitch: true,
+        });
+        map.addControl(compassCtrl, 'bottom-right');
 
         map.on('load', () => {
             applyStyleTweaks(map);
@@ -291,12 +323,11 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
                     }
                 });
 
-                // Traffic overlay on active route
+                // Traffic overlay on active route (Google Maps colors)
                 if (mode === 'driving') {
                     const activeRoute = routes[activeIndex];
                     const trafficSegments = getTrafficSegments(
                         activeRoute.geometry,
-                        activeRoute.weight || activeRoute.rawDuration,
                         activeRoute.rawDuration,
                         parseFloat(activeRoute.distance) * 1000
                     );
@@ -339,14 +370,23 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
                 this.clearRouteLabels();
                 routes.forEach((route, index) => {
                     const coords = route.geometry.coordinates;
-                    const midIdx = Math.floor(coords.length / 2);
-                    const mid = coords[midIdx];
+                    // Place label at ~40% along the route (visible above the fold)
+                    const labelIdx = Math.floor(coords.length * 0.4);
+                    const mid = coords[labelIdx] || coords[Math.floor(coords.length / 2)];
                     if (!mid) return;
 
                     const isActive = index === activeIndex;
                     const el = document.createElement('div');
                     el.className = `route-label ${isActive ? 'route-label-active' : 'route-label-inactive'}`;
-                    el.innerHTML = `<span>${route.duration}</span>`;
+                    // Show route number + duration + distance
+                    el.innerHTML = `
+                        <div class="route-label-inner">
+                            <span class="route-label-num">${index + 1}</span>
+                            <div class="route-label-info">
+                                <span class="route-label-time">${route.duration}</span>
+                                <span class="route-label-dist">${route.distance}</span>
+                            </div>
+                        </div>`;
                     el.style.cursor = 'pointer';
                     el.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -431,17 +471,6 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             `;
 
             if (navArrowRef.current) navArrowRef.current.remove();
-
-            // Add compass/north indicator during navigation
-            if (navControlRef.current) {
-                try { map.removeControl(navControlRef.current); } catch(e) {}
-            }
-            navControlRef.current = new maplibregl.NavigationControl({
-                showZoom: false,
-                showCompass: true,
-                visualizePitch: true,
-            });
-            map.addControl(navControlRef.current, 'top-right');
 
             const placeArrow = (lat, lng) => {
                 navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
@@ -587,11 +616,6 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             if (navArrowRef.current) {
                 navArrowRef.current.remove();
                 navArrowRef.current = null;
-            }
-            // Remove compass
-            if (navControlRef.current && mapRef.current) {
-                try { mapRef.current.removeControl(navControlRef.current); } catch(e) {}
-                navControlRef.current = null;
             }
             // Restore location marker if it was hidden
             if (locationMarkerRef.current) {
