@@ -447,14 +447,14 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
                 navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
                     .setLngLat([lng, lat])
                     .addTo(map);
-                // Fly in close with dramatic perspective tilt
+                // Fly in CLOSE — driver's POV, not aerial
                 map.flyTo({
                     center: [lng, lat],
-                    zoom: 18,
-                    duration: 2200,
-                    pitch: 60,
+                    zoom: 18.5,
+                    duration: 1800,
+                    pitch: 70,
                     bearing: 0,
-                    offset: [0, 80],
+                    offset: [0, 150],
                     essential: true,
                 });
             };
@@ -562,23 +562,23 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
             }
 
             if (navFollowRef.current) {
-                // Dynamic zoom: farther out at highway speed, closer at city speed
-                let targetZoom = 8;
+                // Driver's POV zoom: stay close even at high speed
+                // Waze keeps ~17.5-18 even on highways
+                let targetZoom = 18.5;
                 if (speedKmh !== null) {
-                    if (speedKmh >= 90)      targetZoom = 15.0;
-                    else if (speedKmh >= 70) targetZoom = 15.5;
-                    else if (speedKmh >= 50) targetZoom = 16.0;
-                    else if (speedKmh >= 30) targetZoom = 17.0;
-                    else                     targetZoom = 18.0;
+                    if (speedKmh >= 100)     targetZoom = 17.0;
+                    else if (speedKmh >= 80) targetZoom = 17.5;
+                    else if (speedKmh >= 60) targetZoom = 18.0;
+                    else                     targetZoom = 18.5;
                 }
                 map.easeTo({
                     center: [lng, lat],
-                    duration: 250,
+                    duration: 200,
                     bearing: heading !== null && heading !== undefined ? heading : map.getBearing(),
-                    pitch: 60,
+                    pitch: 70,
                     zoom: targetZoom,
-                    // Offset shifts the car below center so more road ahead is visible
-                    offset: [0, 80],
+                    // Large offset: car sits in bottom third, road ahead fills top 2/3
+                    offset: [0, 150],
                 });
             }
         },
@@ -613,10 +613,10 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, current
                 const lngLat = navArrowRef.current.getLngLat();
                 mapRef.current.easeTo({
                     center: [lngLat.lng, lngLat.lat],
-                    zoom: 17,
-                    pitch: 60,
-                    duration: 800,
-                    offset: [0, 80],
+                    zoom: 18.5,
+                    pitch: 70,
+                    duration: 600,
+                    offset: [0, 150],
                 });
             }
         },

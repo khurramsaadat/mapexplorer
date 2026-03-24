@@ -257,14 +257,15 @@ export default function Home() {
     navStartTimeRef.current = Date.now();
 
     mapRef.current?.startNavigation(route);
-    mapRef.current?.flyTo(route.steps[0].maneuver.location[1], route.steps[0].maneuver.location[0], 18);
 
     if (navigator.geolocation) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           const { latitude, longitude, speed, heading } = pos.coords;
-          if (speed !== null) setLiveSpeed(Math.round(speed * 3.6));
-          mapRef.current?.updateNavPosition(latitude, longitude, heading);
+          const speedKmh = speed !== null ? Math.round(speed * 3.6) : 0;
+          setLiveSpeed(speedKmh);
+          // Pass speed so camera zooms appropriately for driving
+          mapRef.current?.updateNavPosition(latitude, longitude, heading, speedKmh);
           if (navStartTimeRef.current && route.rawDuration) {
             const elapsed = (Date.now() - navStartTimeRef.current) / 1000;
             const remaining = Math.max(0, route.rawDuration - elapsed);
