@@ -9,6 +9,7 @@ import PlaceCard from '@/components/PlaceCard';
 import Toast from '@/components/Toast';
 import SettingsPanel, { loadSettings, saveSettings } from '@/components/SettingsPanel';
 import { shouldBeDark, getTranslations, getDirection } from '@/lib/i18n';
+import { speak, stopSpeech, formatNavInstruction, ensureVoicesLoaded } from '@/lib/voice';
 
 const MapView = dynamic(() => import('@/components/MapView'), {
   ssr: false,
@@ -117,11 +118,16 @@ function getManeuverSVG(step) {
 export default function Home() {
   const mapRef = useRef(null);
 
+  // Render purely client-side to avoid SSR/browser-extension hydration mismatches
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const [isDark, setIsDark] = useState(false);
   const [currentLayer, setCurrentLayer] = useState('streets');
-  const [lang, setLang] = useState('en');
+  const lang = 'en'; // always English
   const [settings, setSettings] = useState(loadSettings());
   const t = getTranslations(lang);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
 
   // UI state
   const [directionsOpen, setDirectionsOpen] = useState(false);
@@ -129,7 +135,6 @@ export default function Home() {
   const [directionsDestination, setDirectionsDestination] = useState(null);
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [toast, setToast] = useState({ message: '', visible: false });
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapRouteSelectIndex, setMapRouteSelectIndex] = useState(null);
   const [mapBearing, setMapBearing] = useState(0);
 
@@ -263,6 +268,9 @@ export default function Home() {
       );
     }
     showToast(t.navStarted);
+    if (voiceEnabledRef.current) {
+      speak('Navigation started. Follow the route on screen.');
+    }
   }, [showToast, t.navStarted]);
 
   const handleQuickStart = useCallback(async (place) => {
@@ -282,19 +290,14 @@ export default function Home() {
   }, [userLocation, handleStartJourney, showToast]);
 
   const handleLayerChange = useCallback((layer) => setCurrentLayer(layer), []);
-  const handleLangToggle = useCallback(() => setLang((prev) => (prev === 'en' ? 'ar' : 'en')), []);
-  const handleZoomIn = useCallback(() => mapRef.current?.zoomIn(), []);
-  const handleZoomOut = useCallback(() => mapRef.current?.zoomOut(), []);
 
-  const handleFullscreenToggle = useCallback(() => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        showToast(`Error attempting to enable fullscreen: ${err.message}`);
-      });
-    } else if (document.exitFullscreen) {
-      document.exitFullscreen();
-    }
-  }, [showToast]);
+  const handleVoiceToggle = useCallback(() => {
+    setVoiceEnabled((prev) => {
+      if (prev) stopSpeech();
+      return !prev;
+    });
+  }, []);
+
 
   const handleSettingsChange = useCallback((newSettings) => {
     setSettings(newSettings);
@@ -308,11 +311,6 @@ export default function Home() {
 
   // --- Effects ---
 
-  useEffect(() => {
-    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
 
   useEffect(() => {
     const s = loadSettings();
@@ -323,11 +321,29 @@ export default function Home() {
     if (navigator.geolocation) {
       setTimeout(() => handleLocate(), 1000);
     }
+    // Pre-load speech synthesis voice list
+    ensureVoicesLoaded();
   }, [handleLocate]);
+
+  // Speak turn instruction whenever the current step changes during navigation
+  const voiceEnabledRef = useRef(voiceEnabled);
+  useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
+
+  useEffect(() => {
+    if (!isNavigating || !currentStep) return;
+    if (!voiceEnabledRef.current) return;
+    const text = formatNavInstruction(currentStep);
+    if (text) speak(text);
+  }, [currentStep, isNavigating]);
+
+  // Stop speech when navigation ends
+  useEffect(() => {
+    if (!isNavigating) stopSpeech();
+  }, [isNavigating]);
 
   useEffect(() => {
     document.documentElement.setAttribute('dir', getDirection(lang));
-  }, [lang]);
+  }, []); // lang is constant 'en'
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -344,6 +360,9 @@ export default function Home() {
 
   // Derive next step for preview
   const nextStep = navRoute?.steps?.[navStepIndex + 1] || null;
+
+  // Don't render anything until mounted on the client (prevents SSR/extension hydration mismatch)
+  if (!mounted) return null;
 
   return (
     <>
@@ -427,6 +446,29 @@ export default function Home() {
               </span>
             </div>
 
+            {/* Voice toggle during navigation */}
+            <button
+              className={`nav-voice-btn ${voiceEnabled ? '' : 'muted'}`}
+              onClick={handleVoiceToggle}
+              aria-label={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
+              title={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
+              id="nav-voice-btn"
+            >
+              {voiceEnabled ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" fillOpacity="0.25" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" fillOpacity="0.25" />
+                  <line x1="23" y1="9" x2="17" y2="15" />
+                  <line x1="17" y1="9" x2="23" y2="15" />
+                </svg>
+              )}
+            </button>
+
             {/* End button */}
             <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn" aria-label="End navigation">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -435,11 +477,11 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Re-center button */}
+          {/* Re-center button — solid navigation arrow, distinct from My Location */}
           <button className="nav-recenter-btn" onClick={handleRecenter} title={t.recenter} id="recenter-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 2v4m0 12v4M2 12h4m12 0h4" />
+            {/* Google Maps-style filled navigation/GPS arrow */}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
             </svg>
           </button>
         </>
@@ -485,22 +527,40 @@ export default function Home() {
         t={t}
       />
 
+      {/* Full controls column — hidden during navigation to avoid duplicate buttons */}
       {!isNavigating && (
         <MapControls
           onLocate={handleLocate}
           onLayerChange={handleLayerChange}
           currentLayer={currentLayer}
-          onZoomIn={handleZoomIn}
-          onZoomOut={handleZoomOut}
-          lang={lang}
-          onLangToggle={handleLangToggle}
-          isFullscreen={isFullscreen}
-          onFullscreenToggle={handleFullscreenToggle}
           onSettingsOpen={() => setSettingsOpen(true)}
           bearing={mapBearing}
           onCompassReset={handleCompassReset}
+          voiceEnabled={voiceEnabled}
+          onVoiceToggle={handleVoiceToggle}
           t={t}
         />
+      )}
+
+      {/* Minimal floating compass during navigation */}
+      {isNavigating && (
+        <button
+          className="nav-compass-btn"
+          onClick={handleCompassReset}
+          title="Reset north"
+          aria-label="Reset north"
+          id="nav-compass-btn"
+        >
+          <svg
+            width="28" height="28" viewBox="0 0 28 28"
+            style={{ transform: `rotate(${-mapBearing}deg)`, transition: 'transform 0.15s ease', display: 'block' }}
+            aria-hidden="true"
+          >
+            <polygon points="14,3 17,14 14,12 11,14" fill="#ea4335" />
+            <polygon points="14,25 17,14 14,16 11,14" fill="#bdc1c6" />
+            <circle cx="14" cy="14" r="2.2" fill="rgba(255,255,255,0.7)" />
+          </svg>
+        </button>
       )}
 
       {selectedPlace && !directionsOpen && !isNavigating && (

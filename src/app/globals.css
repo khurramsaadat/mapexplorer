@@ -149,12 +149,12 @@ body {
 .search-bar {
   display: flex;
   align-items: center;
-  background: var(--bg-glass);
+  background: rgba(88, 95, 110, 0.94);
   backdrop-filter: blur(20px);
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.28);
   padding: 4px 8px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,0.14);
   transition: box-shadow var(--transition), border-color var(--transition);
 }
 
@@ -169,9 +169,13 @@ body {
   background: transparent;
   font-size: 15px;
   font-family: var(--font);
-  color: var(--text-primary);
+  color: #ffffff;
   padding: 10px 8px;
   outline: none;
+}
+
+.search-input::placeholder {
+  color: rgba(255,255,255,0.55);
 }
 
 .search-input::placeholder {
@@ -186,7 +190,7 @@ body {
   height: 40px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.75);
   cursor: pointer;
   border-radius: var(--radius-full);
   transition: background var(--transition), color var(--transition);
@@ -194,18 +198,18 @@ body {
 }
 
 .search-icon-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: rgba(255,255,255,0.12);
+  color: #ffffff;
 }
 
 /* ===== Search Results ===== */
 .search-results {
   margin-top: 4px;
-  background: var(--bg-glass);
+  background: rgba(78, 84, 100, 0.97);
   backdrop-filter: blur(20px);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--border);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.32);
+  border: 1px solid rgba(255,255,255,0.12);
   overflow: hidden;
   max-height: 380px;
   overflow-y: auto;
@@ -218,7 +222,7 @@ body {
   cursor: pointer;
   gap: 16px;
   transition: background var(--transition);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,255,255,0.09);
   width: 100%;
   background: none;
   border-left: none;
@@ -226,7 +230,7 @@ body {
   border-top: none;
   text-align: left;
   font: inherit;
-  color: inherit;
+  color: #ffffff;
 }
 
 .search-result-item:last-child {
@@ -234,7 +238,7 @@ body {
 }
 
 .search-result-item:hover {
-  background: var(--accent-light);
+  background: rgba(255,255,255,0.1);
 }
 
 .result-icon {
@@ -243,7 +247,7 @@ body {
   align-items: center;
   justify-content: center;
   min-width: 44px;
-  color: var(--text-secondary);
+  color: rgba(255,255,255,0.65);
   flex-shrink: 0;
 }
 
@@ -635,65 +639,33 @@ body {
   width: 44px;
   height: 44px;
   border: none;
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  color: var(--text-secondary);
+  /* Light grey surface — works on both light and dark maps */
+  background: rgba(88, 95, 110, 0.92);
+  backdrop-filter: blur(16px);
+  color: #ffffff;
   cursor: pointer;
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+  border: 1px solid rgba(255,255,255,0.14);
   transition: all var(--transition);
 }
 
 .map-control-btn:hover {
-  background: var(--bg-card);
-  color: var(--accent);
-  box-shadow: var(--shadow-lg);
+  background: rgba(108, 115, 132, 0.95);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.28);
   transform: scale(1.05);
 }
 
 .map-control-btn.active {
-  color: var(--accent);
-  background: var(--accent-light);
+  background: rgba(66, 133, 244, 0.85);
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.25);
 }
 
-/* Zoom Controls */
-.zoom-controls {
-  position: fixed;
-  right: 16px;
-  bottom: 400px;
-  display: flex;
-  flex-direction: column;
-  z-index: 1000;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border);
-}
-
-.zoom-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 40px;
-  border: none;
-  background: var(--bg-glass);
-  backdrop-filter: blur(20px);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition);
-  font-size: 18px;
-  font-weight: 500;
-}
-
-.zoom-btn:first-child {
-  border-bottom: 1px solid var(--border);
-}
-
-.zoom-btn:hover {
-  background: var(--bg-card);
-  color: var(--accent);
+.map-control-btn.voice-btn.muted {
+  background: rgba(70, 75, 88, 0.85);
+  color: rgba(255,255,255,0.5);
 }
 
 /* ===== Layers Popup ===== */
@@ -1199,11 +1171,6 @@ body {
     bottom: 80px;
   }
 
-  .zoom-controls {
-    right: 12px;
-    bottom: 220px;
-  }
-
   .layers-popup {
     right: 12px;
     bottom: 200px;
@@ -1657,11 +1624,11 @@ body {
     left: 0;
     right: 0;
     z-index: 1002;
-    background: var(--bg-glass);
+    background: rgba(78, 84, 100, 0.96);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border-top: 1px solid var(--border);
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.12);
+    border-top: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.22);
     padding: 14px 20px 18px;
     display: flex;
     align-items: center;
@@ -1674,27 +1641,27 @@ body {
     width: 56px;
     height: 56px;
     border-radius: 50%;
-    border: 3px solid var(--accent);
-    background: var(--bg-card);
+    border: 3px solid #4285f4;
+    background: rgba(255,255,255,0.12);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    box-shadow: 0 2px 10px rgba(66, 133, 244, 0.25);
+    box-shadow: 0 2px 10px rgba(66, 133, 244, 0.35);
     transition: border-color 0.4s ease;
 }
 
 .nav-speed-circle .nav-speed-value {
     font-size: 18px;
     font-weight: 800;
-    color: var(--text-primary);
+    color: #ffffff;
     line-height: 1;
 }
 
 .nav-speed-circle .nav-speed-unit {
     font-size: 9px;
-    color: var(--text-tertiary);
+    color: rgba(255,255,255,0.65);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1714,13 +1681,13 @@ body {
 .nav-bottom-time {
     font-size: 22px;
     font-weight: 800;
-    color: var(--text-primary);
+    color: #ffffff;
     white-space: nowrap;
     letter-spacing: -0.3px;
 }
 
 .nav-bottom-dot {
-    color: var(--text-tertiary);
+    color: rgba(255,255,255,0.45);
     font-size: 18px;
     font-weight: 300;
     flex-shrink: 0;
@@ -1729,13 +1696,13 @@ body {
 .nav-bottom-dist {
     font-size: 15px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: rgba(255,255,255,0.85);
     white-space: nowrap;
 }
 
 .nav-bottom-arrival {
     font-size: 13px;
-    color: var(--text-tertiary);
+    color: rgba(255,255,255,0.65);
     white-space: nowrap;
 }
 
@@ -1763,7 +1730,61 @@ body {
     box-shadow: 0 4px 16px rgba(234, 67, 53, 0.55);
 }
 
-/* Re-center button during navigation */
+/* Floating compass during navigation (top-right, above re-center) */
+.nav-compass-btn {
+    position: fixed;
+    right: 16px;
+    top: 100px;
+    width: 48px;
+    height: 48px;
+    border: none;
+    background: rgba(88, 95, 110, 0.92);
+    backdrop-filter: blur(16px);
+    color: #ffffff;
+    cursor: pointer;
+    border-radius: var(--radius-full);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.28);
+    border: 1px solid rgba(255,255,255,0.14);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1004;
+    transition: all var(--transition);
+}
+
+.nav-compass-btn:hover {
+    background: rgba(108, 115, 132, 0.95);
+    transform: scale(1.08);
+}
+
+/* Voice toggle button inside nav bottom bar */
+.nav-voice-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.12);
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all var(--transition);
+}
+
+.nav-voice-btn:hover {
+    background: rgba(255,255,255,0.22);
+    border-color: rgba(255,255,255,0.5);
+}
+
+.nav-voice-btn.muted {
+    color: rgba(255,255,255,0.4);
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.12);
+}
+
+/* Re-center button during navigation — filled blue nav arrow */
 .nav-recenter-btn {
     position: fixed;
     right: 16px;
@@ -1771,13 +1792,13 @@ body {
     width: 48px;
     height: 48px;
     border: none;
-    background: var(--bg-glass);
+    background: #4285f4;
     backdrop-filter: blur(20px);
-    color: var(--accent);
+    color: #ffffff;
     cursor: pointer;
     border-radius: var(--radius-full);
-    box-shadow: var(--shadow-lg);
-    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(66, 133, 244, 0.45);
+    border: 2px solid rgba(255,255,255,0.25);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1786,8 +1807,9 @@ body {
 }
 
 .nav-recenter-btn:hover {
-    transform: scale(1.12);
-    box-shadow: var(--shadow-xl);
+    background: #1a73e8;
+    transform: scale(1.1);
+    box-shadow: 0 4px 18px rgba(66, 133, 244, 0.6);
 }
 
 /* ===== Place Action Pills (Google Maps Style) ===== */
@@ -1852,10 +1874,6 @@ body {
         border-radius: 20px 20px 0 0 !important;
         box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important;
         z-index: 2000 !important;
-    }
-
-    .zoom-controls {
-        display: none !important;
     }
 
     .directions-panel {
