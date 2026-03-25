@@ -92,7 +92,7 @@ function getTrafficSegments(geometry, routeDuration, routeDistance) {
     return segments;
 }
 
-const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBearingChange, currentLayer, lang, isDark }, ref) {
+const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBearingChange, onStepChange, currentLayer, lang, isDark }, ref) {
     const mapContainerRef = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef([]);
@@ -103,9 +103,15 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
     const navArrowRef = useRef(null);
     const navFollowRef = useRef(true);
     const onBearingChangeRef = useRef(onBearingChange);
+    const onStepChangeRef = useRef(onStepChange);
     const langRef = useRef(lang);
+    // Navigation step tracking (real GPS)
+    const navStepsRef = useRef([]);
+    const navStepIdxRef = useRef(0);
+    const navPreAnnouncedRef = useRef({});  // tracks which steps got a pre-announcement
 
     useEffect(() => { onBearingChangeRef.current = onBearingChange; }, [onBearingChange]);
+    useEffect(() => { onStepChangeRef.current = onStepChange; }, [onStepChange]);
 
     useEffect(() => {
         langRef.current = lang;
@@ -450,6 +456,11 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
             const map = mapRef.current;
             navFollowRef.current = true;
 
+            // Store steps for turn-by-turn tracking
+            navStepsRef.current = route.steps || [];
+            navStepIdxRef.current = 0;
+            navPreAnnouncedRef.current = {};
+
             // Hide static location marker — nav arrow takes over
             if (locationMarkerRef.current) {
                 locationMarkerRef.current.getElement().style.opacity = '0';
@@ -482,14 +493,14 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
                 navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
                     .setLngLat([lng, lat])
                     .addTo(map);
-                // Fly in CLOSE — driver's POV, not aerial
+                // Fly in CLOSE — driver's POV, steep perspective
                 map.flyTo({
                     center: [lng, lat],
                     zoom: 18.5,
                     duration: 1800,
-                    pitch: 70,
+                    pitch: 78,
                     bearing: 0,
-                    offset: [0, 150],
+                    offset: [0, 160],
                     essential: true,
                 });
             };
@@ -597,24 +608,62 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
             }
 
             if (navFollowRef.current) {
-                // Driver's POV zoom: stay close even at high speed
-                // Waze keeps ~17.5-18 even on highways
+                // Dynamic zoom: close at low speed, pull back on highway
                 let targetZoom = 18.5;
                 if (speedKmh !== null) {
-                    if (speedKmh >= 100)     targetZoom = 17.0;
-                    else if (speedKmh >= 80) targetZoom = 17.5;
-                    else if (speedKmh >= 60) targetZoom = 18.0;
+                    if (speedKmh >= 110)    targetZoom = 16.5;
+                    else if (speedKmh >= 90) targetZoom = 17.0;
+                    else if (speedKmh >= 70) targetZoom = 17.5;
+                    else if (speedKmh >= 50) targetZoom = 18.0;
                     else                     targetZoom = 18.5;
                 }
                 map.easeTo({
                     center: [lng, lat],
-                    duration: 200,
+                    duration: 250,
                     bearing: heading !== null && heading !== undefined ? heading : map.getBearing(),
-                    pitch: 70,
+                    pitch: 78,
                     zoom: targetZoom,
-                    // Large offset: car sits in bottom third, road ahead fills top 2/3
-                    offset: [0, 150],
+                    offset: [0, 160],
                 });
+            }
+
+            // ── Turn-by-turn step tracking ───────────────────────────────────
+            const steps = navStepsRef.current;
+            if (!steps || steps.length === 0) return;
+
+            // Haversine distance in metres
+            const haversineM = (lat1, lon1, lat2, lon2) => {
+                const R = 6371000;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) ** 2 +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLon / 2) ** 2;
+                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            };
+
+            const curIdx = navStepIdxRef.current;
+
+            // Look ahead 1-3 upcoming steps for early advance
+            for (let si = curIdx + 1; si <= Math.min(curIdx + 3, steps.length - 1); si++) {
+                const step = steps[si];
+                const loc = step?.maneuver?.location;
+                if (!loc) continue;
+
+                const distM = haversineM(lat, lng, loc[1], loc[0]);
+
+                // Pre-announce at ~350 m — "In 350m, turn right…"
+                if (distM < 350 && distM > 60 && !navPreAnnouncedRef.current[`pre_${si}`]) {
+                    navPreAnnouncedRef.current[`pre_${si}`] = true;
+                    onStepChangeRef.current?.({ step, stepIndex: si, distanceM: distM, type: 'pre-announce' });
+                }
+
+                // Execute step when within 60 m of the maneuver point
+                if (distM < 60 && si > navStepIdxRef.current) {
+                    navStepIdxRef.current = si;
+                    onStepChangeRef.current?.({ step, stepIndex: si, distanceM: distM, type: 'arrive' });
+                    break;
+                }
             }
         },
 
@@ -644,9 +693,9 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
                 mapRef.current.easeTo({
                     center: [lngLat.lng, lngLat.lat],
                     zoom: 18.5,
-                    pitch: 70,
+                    pitch: 78,
                     duration: 600,
-                    offset: [0, 150],
+                    offset: [0, 160],
                 });
             }
         },

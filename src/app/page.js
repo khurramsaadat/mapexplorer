@@ -236,6 +236,25 @@ export default function Home() {
     showToast(t.navEnded);
   }, [showToast, t.navEnded]);
 
+  // Called by MapView when GPS position crosses a step maneuver point
+  const handleStepChange = useCallback(({ step, stepIndex, distanceM, type }) => {
+    if (type === 'pre-announce') {
+      // ~350m warning — "In 350m, turn right…"
+      if (voiceEnabledRef.current) {
+        const dist = distanceM < 200 ? 'In 200 meters' : 'In 400 meters';
+        const instr = formatNavInstruction(step);
+        if (instr) speak(`${dist}, ${instr}`);
+      }
+    } else {
+      // At the maneuver — speak and update UI
+      setCurrentStep(step);
+      setNavStepIndex(stepIndex);
+      if (voiceEnabledRef.current) {
+        speak(formatNavInstruction(step));
+      }
+    }
+  }, []);
+
   const handleStartJourney = useCallback((route) => {
     setIsNavigating(true);
     setNavRoute(route);
@@ -248,13 +267,17 @@ export default function Home() {
 
     mapRef.current?.startNavigation(route);
 
+    // Request fullscreen on navigation start (counts as user gesture)
+    if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+
     if (navigator.geolocation) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           const { latitude, longitude, speed, heading } = pos.coords;
           const speedKmh = speed !== null ? Math.round(speed * 3.6) : 0;
           setLiveSpeed(speedKmh);
-          // Pass speed so camera zooms appropriately for driving
           mapRef.current?.updateNavPosition(latitude, longitude, heading, speedKmh);
           if (navStartTimeRef.current && route.rawDuration) {
             const elapsed = (Date.now() - navStartTimeRef.current) / 1000;
@@ -269,7 +292,14 @@ export default function Home() {
     }
     showToast(t.navStarted);
     if (voiceEnabledRef.current) {
-      speak('Navigation started. Follow the route on screen.');
+      speak('Navigation started.');
+      // Announce first step after a short delay
+      setTimeout(() => {
+        const firstStep = route.steps?.[0];
+        if (firstStep && voiceEnabledRef.current) {
+          speak(formatNavInstruction(firstStep));
+        }
+      }, 2800);
     }
   }, [showToast, t.navStarted]);
 
@@ -325,16 +355,9 @@ export default function Home() {
     ensureVoicesLoaded();
   }, [handleLocate]);
 
-  // Speak turn instruction whenever the current step changes during navigation
+  // Keep voiceEnabledRef in sync for use inside callbacks
   const voiceEnabledRef = useRef(voiceEnabled);
   useEffect(() => { voiceEnabledRef.current = voiceEnabled; }, [voiceEnabled]);
-
-  useEffect(() => {
-    if (!isNavigating || !currentStep) return;
-    if (!voiceEnabledRef.current) return;
-    const text = formatNavInstruction(currentStep);
-    if (text) speak(text);
-  }, [currentStep, isNavigating]);
 
   // Stop speech when navigation ends
   useEffect(() => {
@@ -492,6 +515,7 @@ export default function Home() {
         onMapClick={handleMapClick}
         onRouteSelect={handleRouteSelect}
         onBearingChange={handleBearingChange}
+        onStepChange={handleStepChange}
         currentLayer={currentLayer}
         lang={lang}
         isDark={isDark}
