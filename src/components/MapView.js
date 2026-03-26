@@ -81,11 +81,11 @@ function getTrafficSegments(geometry, routeDuration, routeDistance) {
         const noise = (Math.abs(Math.sin(mid[0] * 1731.5 + mid[1] * 2891.3)) +
                        Math.abs(Math.cos(mid[0] * 971.3 + mid[1] * 1453.7))) / 2;
 
-        // Google Maps traffic palette
+        // Google Maps / Waze traffic palette: green = clear, orange = slow, red = jam
         let color = '#34a853'; // green  — free flow
-        if      (noise > 0.78) color = '#ea4335'; // red    — heavy traffic
-        else if (noise > 0.58) color = '#ff7043'; // orange — slow
-        else if (noise > 0.38) color = '#fbbc05'; // yellow — moderate
+        if      (noise > 0.72) color = '#e53935'; // red    — heavy jam
+        else if (noise > 0.50) color = '#fb8c00'; // orange — slow traffic
+        else if (noise > 0.30) color = '#fdd835'; // yellow — mild slowdown
 
         segments.push({ coordinates: segCoords, color });
     }
@@ -108,7 +108,16 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
     // Navigation step tracking (real GPS)
     const navStepsRef = useRef([]);
     const navStepIdxRef = useRef(0);
-    const navPreAnnouncedRef = useRef({});  // tracks which steps got a pre-announcement
+    const navPreAnnouncedRef = useRef({});
+    // Route coordinates for road-snapping
+    const navRouteCoordsRef = useRef([]);
+    // Nav mode: 'driving' | 'walking'
+    const navModeRef = useRef('driving');
+    // EMA smoothed position for jitter reduction
+    const smoothedPosRef = useRef(null);
+    // Speed from GPS delta (fallback when native speed is null/0)
+    const lastPosTimeRef = useRef(null);
+    const lastPosRef = useRef(null);
 
     useEffect(() => { onBearingChangeRef.current = onBearingChange; }, [onBearingChange]);
     useEffect(() => { onStepChangeRef.current = onStepChange; }, [onStepChange]);
@@ -451,15 +460,20 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
         },
 
         // Navigation mode
-        startNavigation(route, overridePosition = null) {
+        startNavigation(route, overridePosition = null, mode = 'driving') {
             if (!mapRef.current) return;
             const map = mapRef.current;
             navFollowRef.current = true;
 
-            // Store steps for turn-by-turn tracking
+            // Store steps and route coords for tracking + snapping
             navStepsRef.current = route.steps || [];
             navStepIdxRef.current = 0;
             navPreAnnouncedRef.current = {};
+            navRouteCoordsRef.current = route.geometry?.coordinates || [];
+            navModeRef.current = mode;
+            smoothedPosRef.current = null;
+            lastPosTimeRef.current = null;
+            lastPosRef.current = null;
 
             // Hide static location marker — nav arrow takes over
             if (locationMarkerRef.current) {
@@ -493,12 +507,13 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
                 navArrowRef.current = new maplibregl.Marker({ element: el, rotationAlignment: 'map' })
                     .setLngLat([lng, lat])
                     .addTo(map);
-                // Fly in CLOSE — driver's POV, steep perspective
+                // Fly in CLOSE — driver's/walker's POV
+                const isWalking = navModeRef.current === 'walking';
                 map.flyTo({
                     center: [lng, lat],
-                    zoom: 18.5,
+                    zoom: isWalking ? 19 : 18.5,
                     duration: 1800,
-                    pitch: 78,
+                    pitch: isWalking ? 50 : 78,
                     bearing: 0,
                     offset: [0, 160],
                     essential: true,
@@ -599,39 +614,9 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
         updateNavPosition(lat, lng, heading, speedKmh = null) {
             if (!mapRef.current) return;
             const map = mapRef.current;
+            const isWalking = navModeRef.current === 'walking';
 
-            if (navArrowRef.current) {
-                navArrowRef.current.setLngLat([lng, lat]);
-                if (heading !== null && heading !== undefined) {
-                    navArrowRef.current.setRotation(heading);
-                }
-            }
-
-            if (navFollowRef.current) {
-                // Dynamic zoom: close at low speed, pull back on highway
-                let targetZoom = 18.5;
-                if (speedKmh !== null) {
-                    if (speedKmh >= 110)    targetZoom = 16.5;
-                    else if (speedKmh >= 90) targetZoom = 17.0;
-                    else if (speedKmh >= 70) targetZoom = 17.5;
-                    else if (speedKmh >= 50) targetZoom = 18.0;
-                    else                     targetZoom = 18.5;
-                }
-                map.easeTo({
-                    center: [lng, lat],
-                    duration: 250,
-                    bearing: heading !== null && heading !== undefined ? heading : map.getBearing(),
-                    pitch: 78,
-                    zoom: targetZoom,
-                    offset: [0, 160],
-                });
-            }
-
-            // ── Turn-by-turn step tracking ───────────────────────────────────
-            const steps = navStepsRef.current;
-            if (!steps || steps.length === 0) return;
-
-            // Haversine distance in metres
+            // ── Haversine helper ─────────────────────────────────────────────
             const haversineM = (lat1, lon1, lat2, lon2) => {
                 const R = 6371000;
                 const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -642,24 +627,117 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
                 return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             };
 
-            const curIdx = navStepIdxRef.current;
+            // ── Speed from position delta (fallback for inaccurate GPS speed) ─
+            const now = Date.now();
+            let computedSpeed = speedKmh;
+            if (lastPosRef.current && lastPosTimeRef.current) {
+                const dtS = (now - lastPosTimeRef.current) / 1000;
+                if (dtS > 0.5 && dtS < 5) {
+                    const distM = haversineM(lastPosRef.current.lat, lastPosRef.current.lng, lat, lng);
+                    const deltaKmh = (distM / dtS) * 3.6;
+                    // Use delta speed if GPS speed is null or suspiciously high/low
+                    if (speedKmh === null || speedKmh <= 0) {
+                        computedSpeed = Math.round(deltaKmh);
+                    } else {
+                        // Blend GPS and delta to smooth out spikes
+                        computedSpeed = Math.round(speedKmh * 0.6 + deltaKmh * 0.4);
+                    }
+                }
+            }
+            lastPosRef.current = { lat, lng };
+            lastPosTimeRef.current = now;
 
-            // Look ahead 1-3 upcoming steps for early advance
-            for (let si = curIdx + 1; si <= Math.min(curIdx + 3, steps.length - 1); si++) {
+            // ── Road-snapping: project GPS point onto nearest route segment ───
+            const routeCoords = navRouteCoordsRef.current;
+            let snapLat = lat, snapLng = lng, snapHeading = heading;
+            if (routeCoords.length >= 2) {
+                let minDist = Infinity;
+                for (let i = 0; i < routeCoords.length - 1; i++) {
+                    const [ax, ay] = routeCoords[i];
+                    const [bx, by] = routeCoords[i + 1];
+                    const dx = bx - ax, dy = by - ay;
+                    const len2 = dx * dx + dy * dy;
+                    if (len2 === 0) continue;
+                    let t = ((lng - ax) * dx + (lat - ay) * dy) / len2;
+                    t = Math.max(0, Math.min(1, t));
+                    const px = ax + t * dx, py = ay + t * dy;
+                    const d = Math.sqrt((lng - px) ** 2 + (lat - py) ** 2);
+                    if (d < minDist) {
+                        minDist = d;
+                        if (d < 0.0006) { // ~65 m — only snap if we're close enough
+                            snapLat = py;
+                            snapLng = px;
+                            // Derive heading from segment direction
+                            const segHdg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+                            snapHeading = segHdg;
+                        }
+                    }
+                }
+            }
+
+            // ── EMA position smoothing (reduces GPS jitter) ──────────────────
+            const alpha = isWalking ? 0.45 : 0.35; // more smoothing for faster driving
+            if (!smoothedPosRef.current) {
+                smoothedPosRef.current = { lat: snapLat, lng: snapLng };
+            } else {
+                smoothedPosRef.current = {
+                    lat: smoothedPosRef.current.lat * (1 - alpha) + snapLat * alpha,
+                    lng: smoothedPosRef.current.lng * (1 - alpha) + snapLng * alpha,
+                };
+            }
+            const { lat: sLat, lng: sLng } = smoothedPosRef.current;
+
+            // ── Update arrow marker ──────────────────────────────────────────
+            if (navArrowRef.current) {
+                navArrowRef.current.setLngLat([sLng, sLat]);
+                if (snapHeading !== null && snapHeading !== undefined) {
+                    navArrowRef.current.setRotation(snapHeading);
+                }
+            }
+
+            // ── Camera follow ────────────────────────────────────────────────
+            if (navFollowRef.current) {
+                let targetZoom = isWalking ? 19.0 : 18.5;
+                if (!isWalking && computedSpeed !== null) {
+                    if (computedSpeed >= 110)     targetZoom = 16.5;
+                    else if (computedSpeed >= 90) targetZoom = 17.0;
+                    else if (computedSpeed >= 70) targetZoom = 17.5;
+                    else if (computedSpeed >= 50) targetZoom = 18.0;
+                    else                          targetZoom = 18.5;
+                }
+                map.easeTo({
+                    center: [sLng, sLat],
+                    duration: 600, // longer = smoother camera
+                    easing: (t) => t, // linear feels best for following
+                    bearing: snapHeading !== null && snapHeading !== undefined ? snapHeading : map.getBearing(),
+                    pitch: isWalking ? 50 : 78,
+                    zoom: targetZoom,
+                    offset: [0, 160],
+                });
+            }
+
+            // ── Turn-by-turn step tracking ───────────────────────────────────
+            const steps = navStepsRef.current;
+            if (!steps || steps.length === 0) return;
+
+            const curIdx = navStepIdxRef.current;
+            // Look ahead up to 4 steps (handles GPS drift skipping steps)
+            for (let si = curIdx + 1; si <= Math.min(curIdx + 4, steps.length - 1); si++) {
                 const step = steps[si];
                 const loc = step?.maneuver?.location;
                 if (!loc) continue;
 
+                // Use raw GPS for distance-to-maneuver (snapping can shift position)
                 const distM = haversineM(lat, lng, loc[1], loc[0]);
 
-                // Pre-announce at ~350 m — "In 350m, turn right…"
-                if (distM < 350 && distM > 60 && !navPreAnnouncedRef.current[`pre_${si}`]) {
+                // Pre-announce at ~300 m — spoken warning before the turn
+                if (distM < 320 && distM > 80 && !navPreAnnouncedRef.current[`pre_${si}`]) {
                     navPreAnnouncedRef.current[`pre_${si}`] = true;
                     onStepChangeRef.current?.({ step, stepIndex: si, distanceM: distM, type: 'pre-announce' });
                 }
 
-                // Execute step when within 60 m of the maneuver point
-                if (distM < 60 && si > navStepIdxRef.current) {
+                // Execute step when within 80 m (wider threshold for GPS accuracy)
+                if (distM < 80 && si > navStepIdxRef.current) {
                     navStepIdxRef.current = si;
                     onStepChangeRef.current?.({ step, stepIndex: si, distanceM: distM, type: 'arrive' });
                     break;
@@ -690,10 +768,11 @@ const MapView = forwardRef(function MapView({ onMapClick, onRouteSelect, onBeari
             navFollowRef.current = true;
             if (navArrowRef.current && mapRef.current) {
                 const lngLat = navArrowRef.current.getLngLat();
+                const isWalking = navModeRef.current === 'walking';
                 mapRef.current.easeTo({
                     center: [lngLat.lng, lngLat.lat],
-                    zoom: 18.5,
-                    pitch: 78,
+                    zoom: isWalking ? 19 : 18.5,
+                    pitch: isWalking ? 50 : 78,
                     duration: 600,
                     offset: [0, 160],
                 });

@@ -509,6 +509,17 @@ body {
   color: var(--text-tertiary);
 }
 
+/* GPS acquiring state — pulsing teal border */
+@keyframes gpsPulse {
+    0%, 100% { border-color: #26a69a; box-shadow: 0 0 0 2px rgba(38, 166, 154, 0.15); }
+    50%       { border-color: #4db6ac; box-shadow: 0 0 0 4px rgba(38, 166, 154, 0.25); }
+}
+.directions-input.gps-loading {
+    border-color: #26a69a;
+    color: var(--text-secondary);
+    animation: gpsPulse 1.4s ease-in-out infinite;
+}
+
 .swap-btn-container {
   display: flex;
   justify-content: center;
@@ -1104,10 +1115,40 @@ body {
 
 /* ===== Responsive ===== */
 /* Lane Assist */
+/* Lane markings — Waze style inside turn card */
+.nav-lane-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    align-items: flex-end;
+}
+
+.nav-lane-mark {
+    width: 20px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.nav-lane-mark.valid {
+    color: #ffffff;
+    filter: drop-shadow(0 0 3px rgba(255,255,255,0.6));
+    opacity: 1;
+}
+
+.nav-lane-mark.invalid {
+    color: rgba(255,255,255,0.3);
+    opacity: 0.4;
+}
+
+/* Legacy standalone lane assist banner (kept for fallback) */
 .lane-assist-banner {
     background: #004dcf;
     color: white;
-    padding: 12px 20px;
+    padding: 8px 20px;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -1123,13 +1164,13 @@ body {
 }
 
 .lane-icon {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 40px;
-    font-size: 14px;
+    border-radius: 3px;
+    font-size: 12px;
     border: 1.5px solid rgba(255,255,255,0.3);
 }
 
@@ -1625,15 +1666,15 @@ body {
     left: 0;
     right: 0;
     z-index: 1002;
-    background: rgba(78, 84, 100, 0.96);
+    background: rgba(30, 34, 44, 0.97);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    border-top: 1px solid rgba(255,255,255,0.12);
-    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.22);
-    padding: 14px 20px 18px;
+    border-top: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.30);
+    padding: 10px 16px 14px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1731,13 +1772,21 @@ body {
     box-shadow: 0 4px 16px rgba(234, 67, 53, 0.55);
 }
 
-/* Floating compass during navigation (top-right, above re-center) */
-.nav-compass-btn {
+/* Floating controls group during navigation — column below the blue banner */
+.nav-floating-controls {
     position: fixed;
-    right: 16px;
-    top: 100px;
-    width: 48px;
-    height: 48px;
+    right: 12px;
+    /* sits just below the turn card + next-step bar (~130px) */
+    top: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1004;
+}
+
+.nav-compass-btn {
+    width: 44px;
+    height: 44px;
     border: none;
     background: rgba(88, 95, 110, 0.92);
     backdrop-filter: blur(16px);
@@ -1749,13 +1798,17 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1004;
     transition: all var(--transition);
 }
 
 .nav-compass-btn:hover {
     background: rgba(108, 115, 132, 0.95);
     transform: scale(1.08);
+}
+
+.nav-voice-float.muted {
+    color: rgba(255,255,255,0.4);
+    background: rgba(55, 60, 70, 0.85);
 }
 
 /* Voice toggle button inside nav bottom bar */

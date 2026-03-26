@@ -151,6 +151,9 @@ export default function Home() {
   const watchIdRef = useRef(null);
   const userLocWatchIdRef = useRef(null);
   const navStartTimeRef = useRef(null);
+  // Speed computation from position delta
+  const lastNavPosRef = useRef(null);
+  const lastNavTimeRef = useRef(null);
 
   // --- Callbacks ---
 
@@ -265,20 +268,52 @@ export default function Home() {
     setNavStepIndex(0);
     navStartTimeRef.current = Date.now();
 
-    mapRef.current?.startNavigation(route);
+    mapRef.current?.startNavigation(route, null, navMode);
 
     // Request fullscreen on navigation start (counts as user gesture)
     if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
 
+    lastNavPosRef.current = null;
+    lastNavTimeRef.current = null;
+
     if (navigator.geolocation) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
           const { latitude, longitude, speed, heading } = pos.coords;
-          const speedKmh = speed !== null ? Math.round(speed * 3.6) : 0;
-          setLiveSpeed(speedKmh);
-          mapRef.current?.updateNavPosition(latitude, longitude, heading, speedKmh);
+          const now = Date.now();
+
+          // Compute speed from position delta as fallback
+          let deltaKmh = null;
+          if (lastNavPosRef.current && lastNavTimeRef.current) {
+            const dtS = (now - lastNavTimeRef.current) / 1000;
+            if (dtS > 0.3 && dtS < 8) {
+              const R = 6371000;
+              const dLat = (latitude - lastNavPosRef.current.lat) * Math.PI / 180;
+              const dLon = (longitude - lastNavPosRef.current.lng) * Math.PI / 180;
+              const a = Math.sin(dLat / 2) ** 2 + Math.cos(lastNavPosRef.current.lat * Math.PI / 180) *
+                Math.cos(latitude * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+              const distM = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              deltaKmh = (distM / dtS) * 3.6;
+            }
+          }
+          lastNavPosRef.current = { lat: latitude, lng: longitude };
+          lastNavTimeRef.current = now;
+
+          // Best speed estimate: blend GPS + delta, prefer delta when GPS is 0/null
+          let bestSpeed = null;
+          const gpsKmh = speed !== null && speed >= 0 ? Math.round(speed * 3.6) : null;
+          if (gpsKmh !== null && deltaKmh !== null) {
+            bestSpeed = Math.round(gpsKmh * 0.55 + deltaKmh * 0.45);
+          } else if (gpsKmh !== null) {
+            bestSpeed = gpsKmh;
+          } else if (deltaKmh !== null) {
+            bestSpeed = Math.round(deltaKmh);
+          }
+
+          setLiveSpeed(bestSpeed);
+          mapRef.current?.updateNavPosition(latitude, longitude, heading, bestSpeed);
           if (navStartTimeRef.current && route.rawDuration) {
             const elapsed = (Date.now() - navStartTimeRef.current) / 1000;
             const remaining = Math.max(0, route.rawDuration - elapsed);
@@ -392,7 +427,7 @@ export default function Home() {
       {/* ===== Navigation HUD ===== */}
       {isNavigating && navRoute && (
         <>
-          {/* TOP: Waze-style turn instruction card */}
+          {/* TOP: Turn card + lane assist + next step */}
           <div className="nav-hud-container">
             <div className="nav-turn-card">
               <div className="nav-turn-icon-wrap">
@@ -403,13 +438,19 @@ export default function Home() {
                   {currentStep?.distance || navRoute.distance}
                 </div>
                 <div className="nav-turn-street">
-                  {currentStep?.name
-                    ? currentStep.name
-                    : (currentStep?.instruction || 'Proceed on route')}
+                  {/* Prefer full English instruction; name is already English-resolved from api.js */}
+                  {currentStep?.instruction || currentStep?.name || 'Continue on route'}
                 </div>
-                {currentStep?.instruction && currentStep?.name && (
-                  <div className="nav-turn-instruction">
-                    {currentStep.instruction}
+                {/* Lane markings — Waze style inside the turn card */}
+                {navRoute.steps?.[navStepIndex]?.lanes && (
+                  <div className="nav-lane-row">
+                    {navRoute.steps[navStepIndex].lanes.map((isValid, i) => (
+                      <div key={i} className={`nav-lane-mark ${isValid ? 'valid' : 'invalid'}`}>
+                        <svg width="12" height="20" viewBox="0 0 12 20" fill="currentColor">
+                          <path d="M6 0 L10 8 H7 V20 H5 V8 H2 Z" />
+                        </svg>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -418,81 +459,33 @@ export default function Home() {
             {/* Next step preview */}
             {nextStep && (
               <div className="nav-next-step">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: 0.7, flexShrink: 0 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: 0.65, flexShrink: 0 }}>
                   <path d="M12 20V4M5 11l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span className="nav-next-step-label">Then</span>
                 <span className="nav-next-step-instruction">
-                  {nextStep.name || nextStep.instruction}
+                  {nextStep.instruction || nextStep.name}
                 </span>
                 <span className="nav-next-step-dist">{nextStep.distance}</span>
               </div>
             )}
-
-            {/* Lane assist */}
-            {navRoute.steps?.[navStepIndex]?.lanes && (
-              <div className="lane-assist-banner">
-                <div className="lane-assist-label">Keep in lanes</div>
-                <div className="lane-indicators">
-                  {navRoute.steps[navStepIndex].lanes.map((isValid, i) => (
-                    <div key={i} className={`lane-icon ${isValid ? 'valid' : 'invalid'}`}>↑</div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* BOTTOM: Google Maps style ETA bar */}
+          {/* BOTTOM: ETA bar */}
           <div className="nav-bottom-bar" id="nav-eta-banner">
-            {/* Speed badge (Waze style) */}
             <div className="nav-speed-circle">
-              <span className="nav-speed-value">
-                {liveSpeed !== null ? liveSpeed : '--'}
-              </span>
+              <span className="nav-speed-value">{liveSpeed !== null ? liveSpeed : '--'}</span>
               <span className="nav-speed-unit">km/h</span>
             </div>
-
-            {/* ETA info */}
             <div className="nav-bottom-info">
               <span className="nav-bottom-time">
-                {typeof remainingDuration === 'string'
-                  ? remainingDuration
-                  : navRoute.duration}
+                {typeof remainingDuration === 'string' ? remainingDuration : navRoute.duration}
               </span>
               <span className="nav-bottom-dot">·</span>
-              <span className="nav-bottom-dist">
-                {remainingDistance || navRoute.distance}
-              </span>
+              <span className="nav-bottom-dist">{remainingDistance || navRoute.distance}</span>
               <span className="nav-bottom-dot">·</span>
-              <span className="nav-bottom-arrival">
-                {calculateETA(navRoute.rawDuration)}
-              </span>
+              <span className="nav-bottom-arrival">{calculateETA(navRoute.rawDuration)}</span>
             </div>
-
-            {/* Voice toggle during navigation */}
-            <button
-              className={`nav-voice-btn ${voiceEnabled ? '' : 'muted'}`}
-              onClick={handleVoiceToggle}
-              aria-label={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
-              title={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
-              id="nav-voice-btn"
-            >
-              {voiceEnabled ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" fillOpacity="0.25" />
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" fillOpacity="0.25" />
-                  <line x1="23" y1="9" x2="17" y2="15" />
-                  <line x1="17" y1="9" x2="23" y2="15" />
-                </svg>
-              )}
-            </button>
-
-            {/* End button */}
             <button className="nav-end-btn" onClick={handleEndJourney} id="end-nav-btn" aria-label="End navigation">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
@@ -500,9 +493,8 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Re-center button — solid navigation arrow, distinct from My Location */}
+          {/* Re-center button */}
           <button className="nav-recenter-btn" onClick={handleRecenter} title={t.recenter} id="recenter-btn">
-            {/* Google Maps-style filled navigation/GPS arrow */}
             <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
             </svg>
@@ -566,25 +558,46 @@ export default function Home() {
         />
       )}
 
-      {/* Minimal floating compass during navigation */}
+      {/* Floating compass + voice during navigation — positioned below the blue banner */}
       {isNavigating && (
-        <button
-          className="nav-compass-btn"
-          onClick={handleCompassReset}
-          title="Reset north"
-          aria-label="Reset north"
-          id="nav-compass-btn"
-        >
-          <svg
-            width="28" height="28" viewBox="0 0 28 28"
-            style={{ transform: `rotate(${-mapBearing}deg)`, transition: 'transform 0.15s ease', display: 'block' }}
-            aria-hidden="true"
+        <div className="nav-floating-controls">
+          <button
+            className="nav-compass-btn"
+            onClick={handleCompassReset}
+            title="Reset north"
+            aria-label="Reset north"
+            id="nav-compass-btn"
           >
-            <polygon points="14,3 17,14 14,12 11,14" fill="#ea4335" />
-            <polygon points="14,25 17,14 14,16 11,14" fill="#bdc1c6" />
-            <circle cx="14" cy="14" r="2.2" fill="rgba(255,255,255,0.7)" />
-          </svg>
-        </button>
+            <svg
+              width="28" height="28" viewBox="0 0 28 28"
+              style={{ transform: `rotate(${-mapBearing}deg)`, transition: 'transform 0.15s ease', display: 'block' }}
+              aria-hidden="true"
+            >
+              <polygon points="14,3 17,14 14,12 11,14" fill="#ea4335" />
+              <polygon points="14,25 17,14 14,16 11,14" fill="#bdc1c6" />
+              <circle cx="14" cy="14" r="2.2" fill="rgba(255,255,255,0.7)" />
+            </svg>
+          </button>
+          <button
+            className={`nav-compass-btn nav-voice-float ${voiceEnabled ? '' : 'muted'}`}
+            onClick={handleVoiceToggle}
+            title={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
+            aria-label={voiceEnabled ? 'Mute voice' : 'Unmute voice'}
+            id="nav-voice-float-btn"
+          >
+            {voiceEnabled ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" fillOpacity="0.3" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" stroke="currentColor">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" fillOpacity="0.2" />
+                <line x1="23" y1="9" x2="17" y2="15" /><line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            )}
+          </button>
+        </div>
       )}
 
       {selectedPlace && !directionsOpen && !isNavigating && (

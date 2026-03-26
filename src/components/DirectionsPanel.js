@@ -25,7 +25,9 @@ export default function DirectionsPanel({
 
     const [activeInput, setActiveInput] = useState(null);
     const [autoResults, setAutoResults] = useState([]);
+    const [gpsLoading, setGpsLoading] = useState(false);
     const debounceRef = useRef(null);
+    const blurTimerRef = useRef(null);
 
     useEffect(() => {
         if (initialDestination && isOpen) {
@@ -34,22 +36,42 @@ export default function DirectionsPanel({
         }
     }, [initialDestination, isOpen]);
 
-    // Auto-detect location when directions panel opens
+    // Auto-detect location when directions panel opens — two-stage for speed
     useEffect(() => {
-        if (isOpen && !origin && !originCoords) {
-            if (navigator.geolocation) {
+        if (!isOpen || origin || originCoords) return;
+        if (!navigator.geolocation) return;
+
+        setGpsLoading(true);
+        setOrigin('Getting your location…');
+
+        // Stage 1: Fast low-accuracy lock (uses cached position, instant on most devices)
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setOrigin(t.yourLocation);
+                setOriginCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                setGpsLoading(false);
+                localStorage.setItem('location_consent', 'granted');
+            },
+            () => {
+                // Stage 1 failed — try high accuracy
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
                         setOrigin(t.yourLocation);
                         setOriginCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                        setGpsLoading(false);
                         localStorage.setItem('location_consent', 'granted');
                     },
-                    () => { }, // silently fail
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    () => {
+                        setOrigin('');
+                        setGpsLoading(false);
+                    },
+                    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
                 );
-            }
-        }
-    }, [isOpen, origin, originCoords, t.yourLocation]);
+            },
+            // Stage 1: allow 30-second cached position, low accuracy → very fast
+            { enableHighAccuracy: false, timeout: 2000, maximumAge: 30000 }
+        );
+    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleInputChange = useCallback((field, value) => {
         if (field === 'origin') {
@@ -70,8 +92,21 @@ export default function DirectionsPanel({
             }
             const places = await searchPlaces(value, lang);
             setAutoResults(places);
-        }, 350);
+        }, 300);
     }, [lang]);
+
+    // Close autocomplete after a short delay on blur (allows click on results first)
+    const handleInputBlur = useCallback(() => {
+        blurTimerRef.current = setTimeout(() => {
+            setActiveInput(null);
+            setAutoResults([]);
+        }, 200);
+    }, []);
+
+    // If user clicks an autocomplete item, cancel the blur close
+    const handleAutoResultMouseDown = useCallback(() => {
+        if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+    }, []);
 
     const handleAutoSelect = (place) => {
         if (activeInput === 'origin') {
@@ -196,13 +231,15 @@ export default function DirectionsPanel({
                     <div className="input-dot origin-dot" />
                     <input
                         type="text"
-                        className="directions-input"
+                        className={`directions-input ${gpsLoading ? 'gps-loading' : ''}`}
                         placeholder={t.chooseOrigin}
                         autoComplete="off"
                         value={origin}
                         onChange={(e) => handleInputChange('origin', e.target.value)}
-                        onFocus={() => setActiveInput('origin')}
+                        onFocus={() => { if (blurTimerRef.current) clearTimeout(blurTimerRef.current); setActiveInput('origin'); }}
+                        onBlur={handleInputBlur}
                         id="origin-input"
+                        readOnly={gpsLoading}
                     />
                     <div className="input-connector" />
                 </div>
@@ -216,14 +253,15 @@ export default function DirectionsPanel({
                         autoComplete="off"
                         value={destination}
                         onChange={(e) => handleInputChange('destination', e.target.value)}
-                        onFocus={() => setActiveInput('destination')}
+                        onFocus={() => { if (blurTimerRef.current) clearTimeout(blurTimerRef.current); setActiveInput('destination'); }}
+                        onBlur={handleInputBlur}
                         id="destination-input"
                     />
                 </div>
 
-                {(autoResults.length > 0 || (activeInput === 'origin' && !originCoords)) && (
-                    <div className="directions-autocomplete" id="directions-autocomplete">
-                        {activeInput === 'origin' && !originCoords && (
+                {(autoResults.length > 0 || (activeInput === 'origin' && !originCoords && !gpsLoading)) && (
+                    <div className="directions-autocomplete" id="directions-autocomplete" onMouseDown={handleAutoResultMouseDown}>
+                        {activeInput === 'origin' && !originCoords && !gpsLoading && (
                             <button type="button" className="search-result-item" onClick={handleUseMyLocation} id="use-my-location">
                                 <div className="result-icon">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -242,6 +280,7 @@ export default function DirectionsPanel({
                                 type="button"
                                 key={place.id}
                                 className="search-result-item"
+                                onMouseDown={handleAutoResultMouseDown}
                                 onClick={() => handleAutoSelect(place)}
                             >
                                 <div className="result-icon">

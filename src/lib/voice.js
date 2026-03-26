@@ -61,6 +61,8 @@ export function formatNavInstruction(step) {
     if (!step) return '';
     const type = (step.maneuver?.type || '').toLowerCase();
     const mod  = (step.maneuver?.modifier || '').toLowerCase();
+    // step.name is already English-resolved from api.js (never Arabic)
+    // Use instruction as fallback display text; name for "onto X"
     const name = step.name?.trim() || '';
     const dist = step.distance?.trim() || '';
 

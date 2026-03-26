@@ -218,13 +218,19 @@ export async function getDirections(startLat, startLon, endLat, endLon, mode = '
                             }
                         }
 
+                        // Build English road name: prefer ref (E311) over Arabic name
+                        const rawName = step.name || '';
+                        const rawRef  = step.ref  || '';
+                        const rawDest = step.destinations || '';
+                        const englishName = resolveEnglishName(rawName, rawRef, rawDest);
+
                         steps.push({
-                            instruction: step.maneuver.modifier 
-                                ? `${step.maneuver.type} ${step.maneuver.modifier}` 
-                                : step.maneuver.type,
+                            instruction: buildInstruction(step.maneuver, englishName),
                             distance: stepDist,
                             rawDistance: step.distance || 0,
-                            name: step.name || '',
+                            name: englishName,
+                            ref: rawRef,
+                            destinations: rawDest,
                             lanes: lanes,
                             maneuver: {
                                 type: step.maneuver.type || 'continue',
@@ -267,18 +273,49 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-function formatInstruction(step) {
-  const modifier = step.maneuver.modifier || '';
-  const type = step.maneuver.type;
-  const name = step.name || 'unnamed road';
+/** Returns true if string contains Arabic characters */
+function hasArabic(str) {
+    return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(str || '');
+}
 
-  if (type === 'turn') return `Turn ${modifier} onto ${name}`;
-  if (type === 'new name') return `Continue onto ${name}`;
-  if (type === 'merge') return `Merge onto ${name}`;
-  if (type === 'fork') return `Take the ${modifier} fork onto ${name}`;
-  if (type === 'roundabout') return `Enter roundabout, take exit onto ${name}`;
-  if (type === 'end of road') return `Turn ${modifier} onto ${name}`;
-  return `Continue on ${name}`;
+/**
+ * Choose the best English road identifier from OSRM step fields.
+ * Priority: non-Arabic name → ref (E311) → destinations (first) → empty string
+ */
+function resolveEnglishName(name, ref, destinations) {
+    if (name && !hasArabic(name)) return name;
+    if (ref && !hasArabic(ref)) return ref;
+    if (destinations) {
+        const first = destinations.split(',')[0].split(';')[0].trim();
+        if (first && !hasArabic(first)) return first;
+    }
+    // If all are Arabic, show ref anyway (E311 is always Latin)
+    if (ref) return ref;
+    return '';
+}
+
+/** Build a readable English turn instruction */
+function buildInstruction(maneuver, roadName) {
+    const type = maneuver.type || 'continue';
+    const mod  = maneuver.modifier || '';
+    const on   = roadName ? ` on ${roadName}` : '';
+
+    if (type === 'depart')     return `Depart${on}`;
+    if (type === 'arrive')     return 'You have arrived at your destination';
+    if (type === 'turn')       return `Turn ${mod}${on}`;
+    if (type === 'new name')   return `Continue${on}`;
+    if (type === 'merge')      return `Merge${mod ? ' ' + mod : ''}${on}`;
+    if (type === 'fork')       return `Take the ${mod} fork${on}`;
+    if (type === 'roundabout') return `Enter roundabout${on}`;
+    if (type === 'rotary')     return `Enter roundabout${on}`;
+    if (type === 'end of road')return `Turn ${mod}${on}`;
+    if (type === 'use lane')   return `Use the ${mod} lane${on}`;
+    if (type === 'continue')   return `Continue${on}`;
+    return `${type}${mod ? ' ' + mod : ''}${on}`;
+}
+
+function formatInstruction(step) {
+    return buildInstruction(step.maneuver, resolveEnglishName(step.name || '', step.ref || '', step.destinations || ''));
 }
 
 function formatDistance(meters) {
